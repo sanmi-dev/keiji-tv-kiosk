@@ -96,6 +96,8 @@ class WebViewManager(
                 ViewportMetaInjector.inject(view)
                 view.postDelayed({
                     view.visibility = View.VISIBLE
+                    // サンミ改造: 見えなくした間に外れたフォーカスを戻し、リモコンのボタンがページへ届くようにする
+                    view.requestFocus()
                     onPageLoading(false)
                 }, 1000)
             }
