@@ -12,13 +12,13 @@ android {
         applicationId = "jp.sanmi.keijitv"
         minSdk = 22
         targetSdk = 36
-        versionCode = 1001
-        versionName = "keiji-1.0.1"
+        versionCode = 1005
+        versionName = "keiji-1.2.0"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release.keystore")
             storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias = System.getenv("KEY_ALIAS") ?: ""
             keyPassword = System.getenv("KEY_PASSWORD") ?: ""
@@ -46,6 +46,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

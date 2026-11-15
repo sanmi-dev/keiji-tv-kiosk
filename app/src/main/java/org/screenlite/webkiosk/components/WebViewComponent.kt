@@ -137,7 +137,7 @@ fun WebViewComponent(
             modifier = modifier,
             factory = { ctx ->
                 Log.d(TAG, "Creating WebView (rotation=$rotation)")
-                webViewManager.createWebView(rotation)
+                webViewManager.createWebView(rotation).also { org.screenlite.webkiosk.app.SignageWebRef.set(it) }
             },
             update = { webView ->
                 if (webView.url != url) {

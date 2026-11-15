@@ -14,7 +14,7 @@ fun MainScreen(activity: Activity, modifier: Modifier) {
 
     LaunchedEffect(Unit) {
         kioskSettings.getStartUrl().collect { newUrl ->
-            url = newUrl
+            url = org.screenlite.webkiosk.data.StartupConfig.signage(newUrl)
         }
     }
 

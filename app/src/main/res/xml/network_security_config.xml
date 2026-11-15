@@ -6,4 +6,8 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <!-- 音楽用 WebView がテレビ内サーバーの MP3 予備ページ（http://127.0.0.1:8787/mp3）を平文で開く -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
 </network-security-config>

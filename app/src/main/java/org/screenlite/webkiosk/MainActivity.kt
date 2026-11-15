@@ -15,11 +15,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.viewinterop.AndroidView
+import org.screenlite.webkiosk.app.RemoteMusicView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -51,6 +56,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         FullScreenHelper.enableImmersiveMode(this.window)
+        // PCから入力するため、テレビの掲示の上にソフトキーボードを出さない。
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
         StayOnTopServiceStarter.ensureRunning(this)
 
         unlockHandler = TapUnlockHandler {
@@ -108,6 +115,14 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
     val context = LocalContext.current
+    val musicBrowser = remember { RemoteMusicView(context) }
+    // テレビ内の音楽操作サーバー（店のPCが店内LANで直接つなぐ）と本部への店内アドレス登録
+    val musicHub = remember { org.screenlite.webkiosk.app.MusicHub(context, musicBrowser) }
+    DisposableEffect(musicBrowser) {
+        musicHub.start()
+        onDispose { musicHub.stop(); musicBrowser.shutdown() }
+    }
+    val pinText by musicHub.pinText
     val idleController = remember { (activity as MainActivity).idleController }
     val isIdleMode by idleController.isIdleMode.collectAsState()
 
@@ -130,7 +145,25 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
     val isTv = isTvDevice()
 
     Box(Modifier.fillMaxSize().background(Color.White)) {
+        // 音楽用ページは掲示の下に保持し、PCにはこのページの画像だけを送る。
+        AndroidView(factory = { musicBrowser }, modifier = Modifier.fillMaxSize())
+        // 掲示WebViewの読み込み中・透明部分でも音楽サイトをテレビには見せない。
+        Box(Modifier.fillMaxSize().background(Color.Black))
         MainScreen(activity = activity, modifier = Modifier.fillMaxSize())
+
+        // 店のPCが番号を求めたときだけ、右下に小さく2分間出す
+        pinText?.let { pin ->
+            androidx.compose.material3.Text(
+                text = "音楽の接続番号 $pin",
+                color = Color.White,
+                fontSize = androidx.compose.ui.unit.TextUnit(28f, androidx.compose.ui.unit.TextUnitType.Sp),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
+                    .background(Color(0xCC1E3A5F))
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            )
+        }
 
         // サンミ改造: テレビでは入力をふさぐ板（TvKioskInputOverlay）を置かない
         if (!isTv) {

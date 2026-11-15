@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MP3（予備）</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #1d2433; color: #fff; font-family: sans-serif; }
+  main { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 28px; }
+  #title { font-size: 44px; }
+  #sub { font-size: 22px; color: #b8c2d6; }
+  .row { display: flex; gap: 32px; }
+  button { font-size: 40px; min-width: 260px; padding: 28px 36px; border-radius: 20px; border: 0; background: #3b82f6; color: #fff; }
+  button.alt { background: #475569; }
+</style>
+</head>
+<body>
+<main>
+  <div id="title">読み込み中…</div>
+  <div id="sub"></div>
+  <div class="row">
+    <button id="play" type="button">一時停止</button>
+    <button id="next" type="button" class="alt">次へ</button>
+  </div>
+  <audio id="audio" preload="auto"></audio>
+</main>
+<script>
+  var TRACKS = [
+    { file: '/mp3/morning-light.mp3', name: 'Morning Light' },
+    { file: '/mp3/quiet-garden.mp3', name: 'Quiet Garden' },
+    { file: '/mp3/soft-breeze.mp3', name: 'Soft Breeze' }
+  ];
+  var i = 0;
+  var audio = document.getElementById('audio');
+  function $(id) { return document.getElementById(id); }
+  function label() { $('play').textContent = audio.paused ? '再生' : '一時停止'; }
+  function load(n) {
+    i = (n + TRACKS.length) % TRACKS.length;
+    audio.src = TRACKS[i].file;
+    $('title').textContent = TRACKS[i].name;
+    $('sub').textContent = (i + 1) + ' / ' + TRACKS.length + '（オリジナル曲・繰り返し再生）';
+    var p = audio.play();
+    if (p && p.catch) p.catch(function () { label(); });
+  }
+  audio.addEventListener('ended', function () { load(i + 1); });
+  audio.addEventListener('play', label);
+  audio.addEventListener('pause', label);
+  audio.addEventListener('error', function () { setTimeout(function () { load(i + 1); }, 3000); });
+  $('play').addEventListener('click', function () { if (audio.paused) audio.play(); else audio.pause(); });
+  $('next').addEventListener('click', function () { load(i + 1); });
+  load(0);
+</script>
+</body>
+</html>
