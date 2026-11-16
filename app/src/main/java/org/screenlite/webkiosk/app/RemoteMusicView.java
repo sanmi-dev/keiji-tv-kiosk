@@ -20,6 +20,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import org.json.JSONObject;
+import org.screenlite.webkiosk.data.MusicResume;
 import org.screenlite.webkiosk.data.StartupConfig;
 import org.screenlite.webkiosk.music.CommandQueue;
 import org.screenlite.webkiosk.music.MusicHttp;
@@ -33,11 +34,19 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private volatile CommandQueue queue = null;
     private volatile int port = 8787;
     private volatile boolean closed = false;
+    private static final String KEY_LAST = "last_music_url";
+    private android.content.SharedPreferences prefs;
+    private volatile boolean pendingMp3 = false;
+    private String lastSaved = null;
     private volatile boolean pinShown = false;
     private volatile byte[] jpeg = null;
     private volatile String state = "{}";
     private String pageError = "";
     private long lastCapture = 0;
+    private static final long WATCH_MS = 5000;
+    private String watchScript = null;
+    private long lastWatch = 0;
+    private long lastUserCmd = -1;
 
     @SuppressLint("SetJavaScriptEnabled")
     public RemoteMusicView(Context context) {
@@ -59,17 +68,55 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                 String scheme = request.getUrl().getScheme();
                 return !("http".equals(scheme) || "https".equals(scheme) || "about".equals(scheme));
             }
-            @Override public void onPageFinished(WebView view, String url) { CookieManager.getInstance().flush(); }
+            @Override public void onPageFinished(WebView view, String url) { CookieManager.getInstance().flush(); remember(url); }
+            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) { remember(url); }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) pageError = error.getDescription().toString();
             }
         });
-        loadUrl(StartupConfig.MUSIC_HOME);
+        try (java.io.InputStream in = context.getAssets().open("loop-watch.js")) {
+            ByteArrayOutputStream buf = new ByteArrayOutputStream(); byte[] chunk = new byte[4096]; int n;
+            while ((n = in.read(chunk)) > 0) buf.write(chunk, 0, n);
+            watchScript = buf.toString("UTF-8");
+        } catch (Exception e) { watchScript = null; }
+        prefs = context.getSharedPreferences("music", Context.MODE_PRIVATE);
+        String saved = null;
+        try { saved = prefs.getString(KEY_LAST, null); } catch (Exception ignored) { }
+        if (MusicResume.MP3.equals(saved)) {
+            // MP3ページはテレビ内サーバーのポートが決まってから開く（決まらなければ10秒後に既定ポートで開く）
+            pendingMp3 = true;
+            ui.postDelayed(this::openPendingMp3, 10000);
+        } else {
+            loadUrl(MusicResume.startUrl(saved, StartupConfig.MUSIC_HOME, port));
+        }
         ui.postDelayed(this::tick, APPLY_MS);
     }
 
     /** テレビ内サーバーの操作の列と実際の待受ポートをつなぐ。 */
-    public void attach(CommandQueue q, int actualPort) { queue = q; port = actualPort; }
+    public void attach(CommandQueue q, int actualPort) { queue = q; port = actualPort; ui.post(this::openPendingMp3); ui.post(this::fixMp3Port); }
+
+    /** 既定ポートで先に開いたMP3ページが、実際のポートと違えば開き直す。 */
+    private void fixMp3Port() {
+        if (closed) return;
+        String u = getUrl();
+        if (MusicResume.MP3.equals(MusicResume.toSaved(u)) && !u.startsWith("http://127.0.0.1:" + port + "/")) {
+            loadUrl(MusicResume.startUrl(MusicResume.MP3, StartupConfig.MUSIC_HOME, port));
+        }
+    }
+
+    private void openPendingMp3() {
+        if (closed || !pendingMp3) return;
+        pendingMp3 = false;
+        loadUrl(MusicResume.startUrl(MusicResume.MP3, StartupConfig.MUSIC_HOME, port));
+    }
+
+    /** 最後に流していた音楽ページを覚える（起動時・朝の電源オンでそこから再開する）。 */
+    private void remember(String url) {
+        String v = MusicResume.toSaved(url);
+        if (v == null || v.equals(lastSaved)) return;
+        lastSaved = v;
+        try { prefs.edit().putString(KEY_LAST, v).apply(); } catch (Exception ignored) { }
+    }
     public void setPinShown(boolean shown) { pinShown = shown; }
 
     @Override public byte[] latestJpeg() { return jpeg; }
@@ -87,6 +134,14 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
             }
             long now = SystemClock.uptimeMillis();
             if (now - lastCapture >= CAPTURE_MS) { lastCapture = now; capture(); }
+            if (watchScript != null && now - lastWatch >= WATCH_MS) {
+                lastWatch = now;
+                String u = getUrl();
+                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
+                    long since = lastUserCmd < 0 ? 1000000000L : now - lastUserCmd;
+                    evaluateJavascript(watchScript + "\n;kjLoopTick(window, Date.now(), " + since + ");", null);
+                }
+            }
         } catch (Exception ignored) {
         } finally {
             if (!closed) ui.postDelayed(this::tick, APPLY_MS);
@@ -112,6 +167,11 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
 
     private void apply(CommandQueue.Command c) {
         pageError = "";
+        switch (c.action) {
+            case "click": case "key": case "text": case "scroll": case "navigate": case "preset": case "back": case "forward": case "reload":
+                lastUserCmd = SystemClock.uptimeMillis(); break;
+            default: break;
+        }
         switch (c.action) {
             case "navigate": {
                 Uri u = Uri.parse(c.value);
