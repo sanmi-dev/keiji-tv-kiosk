@@ -47,6 +47,10 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private String watchScript = null;
     private long lastWatch = 0;
     private long lastUserCmd = -1;
+    private volatile int scrollY = 0, scrollH = 0, clientH = 0;
+    // YouTube のスマホ版は WebView.scrollBy では動かないので、ページの中でスクロールさせる
+    private static final String DOC_JS = "var d=document.scrollingElement||document.body;";
+    private static final String POS_JS = "(function(){try{" + DOC_JS + "return [Math.round(d.scrollTop),Math.round(d.scrollHeight),Math.round(d.clientHeight||window.innerHeight)].join(',')}catch(e){return ''}})()";
 
     @SuppressLint("SetJavaScriptEnabled")
     public RemoteMusicView(Context context) {
@@ -141,6 +145,7 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                     long since = lastUserCmd < 0 ? 1000000000L : now - lastUserCmd;
                     evaluateJavascript(watchScript + "\n;kjLoopTick(window, Date.now(), " + since + ");", null);
                 }
+                readScroll();
             }
         } catch (Exception ignored) {
         } finally {
@@ -151,7 +156,9 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private void capture() {
         try {
             state = new JSONObject().put("url", getUrl() == null ? "" : getUrl())
-                .put("title", getTitle() == null ? "" : getTitle()).put("error", pageError).put("pin", pinShown).toString();
+                .put("title", getTitle() == null ? "" : getTitle()).put("error", pageError).put("pin", pinShown)
+                .put("scrollY", scrollY).put("scrollHeight", scrollH).put("clientHeight", clientH)
+                .put("update", UpdateManager.getStatus()).put("version", org.screenlite.webkiosk.BuildConfig.VERSION_CODE).toString();
         } catch (Exception ignored) { }
         int w = getWidth(), h = getHeight();
         if (w < 1 || h < 1) return;
@@ -168,7 +175,7 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private void apply(CommandQueue.Command c) {
         pageError = "";
         switch (c.action) {
-            case "click": case "key": case "text": case "scroll": case "navigate": case "preset": case "back": case "forward": case "reload":
+            case "click": case "key": case "text": case "scroll": case "scrollTo": case "navigate": case "preset": case "back": case "forward": case "reload":
                 lastUserCmd = SystemClock.uptimeMillis(); break;
             default: break;
         }
@@ -193,7 +200,13 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                 MotionEvent up = MotionEvent.obtain(at, at + 70, MotionEvent.ACTION_UP, x, y, 0);
                 dispatchTouchEvent(down); dispatchTouchEvent(up); down.recycle(); up.recycle(); break;
             }
-            case "scroll": scrollBy(0, c.dy); break;
+            case "scroll":
+                evaluateJavascript("(function(){try{" + DOC_JS + "if(typeof d.scrollBy==='function')d.scrollBy(0," + c.dy + ");else window.scrollBy(0," + c.dy + ")}catch(e){}})()", v -> readScroll());
+                break;
+            case "scrollTo":
+                evaluateJavascript("(function(){try{" + DOC_JS + "var t=Math.max(0,d.scrollHeight-(d.clientHeight||window.innerHeight))*" + c.y + ";if(typeof d.scrollTo==='function')d.scrollTo(0,t);else window.scrollTo(0,t)}catch(e){}})()", v -> readScroll());
+                break;
+            case "checkUpdate": UpdateManager.requestCheck(); break;
             case "text": {
                 requestFocus();
                 InputConnection connection = onCreateInputConnection(new EditorInfo());
@@ -217,6 +230,17 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
             }
             default: break;
         }
+    }
+
+    private void readScroll() {
+        String u = getUrl();
+        if (closed || u == null || !(u.startsWith("http://") || u.startsWith("https://"))) { scrollY = 0; scrollH = 0; clientH = 0; return; }
+        evaluateJavascript(POS_JS, v -> {
+            try {
+                String[] p = (v == null ? "" : v.replace("\"", "")).split(",");
+                if (p.length == 3) { scrollY = Integer.parseInt(p[0]); scrollH = Integer.parseInt(p[1]); clientH = Integer.parseInt(p[2]); }
+            } catch (Exception ignored) { }
+        });
     }
 
     public void shutdown() { closed = true; ui.removeCallbacksAndMessages(null); stopLoading(); loadUrl("about:blank"); destroy(); }

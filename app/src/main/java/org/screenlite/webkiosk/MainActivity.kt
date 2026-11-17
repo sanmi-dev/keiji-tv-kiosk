@@ -80,6 +80,8 @@ class MainActivity : ComponentActivity() {
         // PCから入力するため、テレビの掲示の上にソフトキーボードを出さない。
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
         StayOnTopServiceStarter.ensureRunning(this)
+        // 起動の約60秒後と3時間ごとに新しい版を確かめる
+        org.screenlite.webkiosk.app.UpdateManager.start()
 
         unlockHandler = TapUnlockHandler {
             openSettings()
@@ -105,6 +107,14 @@ class MainActivity : ComponentActivity() {
     private var backHandled = false
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         idleController.onUserInteraction()
+        // 更新のポップアップ中は、決定キーをフォーカスに頼らず画面全体で受ける（離したときに1回だけ）
+        if (org.screenlite.webkiosk.app.UpdateManager.newerCode.value > 0 &&
+            org.screenlite.webkiosk.data.UpdateCheck.isConfirmKey(event.keyCode)) {
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                org.screenlite.webkiosk.app.UpdateManager.install(this)
+            }
+            return true
+        }
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount == 0) backHandled = false
@@ -147,8 +157,15 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
     // テレビ内の音楽操作サーバー（店のPCが店内LANで直接つなぐ）と本部への店内アドレス登録
     val musicHub = remember { org.screenlite.webkiosk.app.MusicHub(context, musicBrowser) }
     DisposableEffect(musicBrowser) {
+        // 前の画面の音楽が残っていたら止める（YouTube と MP3 の二重再生を防ぐ）
+        val prev = org.screenlite.webkiosk.app.MusicHub.owner.claim(musicHub)
+        // ここは UI スレッド。新しいサーバーがポートを取る前に、前の音楽とサーバーを止めて空ける
+        if (prev != null) prev.stopAll()
         musicHub.start()
-        onDispose { musicHub.stop(); musicBrowser.shutdown() }
+        onDispose {
+            musicHub.stopAll()
+            org.screenlite.webkiosk.app.MusicHub.owner.release(musicHub)
+        }
     }
     val pinText by musicHub.pinText
     val idleController = remember { (activity as MainActivity).idleController }
@@ -218,6 +235,10 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
             )
         }
 
+        // 新しい版があれば、掲示の手前に押すまで出し続ける（リモコンの決定で更新）
+        val newer by org.screenlite.webkiosk.app.UpdateManager.newerCode
+        if (newer > 0) UpdatePopup(newer)
+
         val idleFocusRequester = remember { FocusRequester() }
 
         if (isIdleMode) {
@@ -243,4 +264,44 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
             ) {}
         }
     }
+}
+
+@Composable
+private fun UpdatePopup(code: Int) {
+    val context = LocalContext.current
+    val msg by org.screenlite.webkiosk.app.UpdateManager.message
+    val working by org.screenlite.webkiosk.app.UpdateManager.working
+    val focus = remember { FocusRequester() }
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.background(Color(0xFF1E3A5F)).padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            androidx.compose.material3.Text(
+                text = "新しい版があります（版$code）。リモコンの決定で更新します",
+                color = Color.White,
+                fontSize = androidx.compose.ui.unit.TextUnit(26f, androidx.compose.ui.unit.TextUnitType.Sp)
+            )
+            if (msg.isNotEmpty()) {
+                androidx.compose.material3.Text(
+                    text = msg,
+                    color = Color(0xFFFDE68A),
+                    fontSize = androidx.compose.ui.unit.TextUnit(20f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+            val failed = msg.contains("もう一度")
+            androidx.compose.material3.Button(
+                onClick = { org.screenlite.webkiosk.app.UpdateManager.install(context) },
+                enabled = !working,
+                modifier = Modifier.padding(top = 20.dp).focusRequester(focus)
+            ) {
+                androidx.compose.material3.Text(
+                    text = if (working) "お待ちください…" else if (failed) "もう一度" else "更新する",
+                    fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp)
+                )
+            }
+        }
+    }
+    LaunchedEffect(code, working) { if (!working) try { focus.requestFocus() } catch (_: Exception) { } }
 }

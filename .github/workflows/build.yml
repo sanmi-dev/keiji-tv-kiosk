@@ -37,10 +37,16 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk keiji-tv.apk
+          VC=$(grep -oE 'versionCode *= *[0-9]+' app/build.gradle.kts | grep -oE '[0-9]+' | head -1)
+          VN=$(grep -oE 'versionName *= *"[^"]*"' app/build.gradle.kts | head -1 | cut -d'"' -f2)
+          test -n "$VC" || { echo "versionCode を読めませんでした"; exit 1; }
+          test -n "$VN" || { echo "versionName を読めませんでした"; exit 1; }
+          printf '{"versionCode":%s,"versionName":"%s"}\n' "$VC" "$VN" > version.json
+          cat version.json
 
       - name: Publish to release "latest"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release view latest >/dev/null 2>&1 || gh release create latest --title "掲示物テレビ（最新）" --notes "main への push ごとに自動で差し替え"
-          gh release upload latest keiji-tv.apk --clobber
+          gh release upload latest keiji-tv.apk version.json --clobber

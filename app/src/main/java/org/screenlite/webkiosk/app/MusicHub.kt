@@ -42,6 +42,8 @@ object SignageWebRef {
 class MusicHub(context: Context, private val music: RemoteMusicView) {
     companion object {
         private const val TAG = "MusicHub"
+        /** 音楽を鳴らす持ち主はプロセス全体で1つだけ。 */
+        val owner = org.screenlite.webkiosk.music.SingleOwner<MusicHub>()
         const val EXEC = "https://script.google.com/macros/s/AKfycbyvwW1LHg8S6ddtlIIR1V2Yhh5NqTINsfc9zNIEXLgB_LxFMnXF1zcGSo2Q1OHZaiDG/exec"
         private const val PREFS = "music_server"
         private val PORTS = intArrayOf(8787, 8788, 8789, 8790)
@@ -96,6 +98,14 @@ class MusicHub(context: Context, private val music: RemoteMusicView) {
             if (port > 0 && !stopped) ui.post { music.attach(queue, port) }
         }
         worker.scheduleWithFixedDelay({ registerOnce() }, 30, 300, TimeUnit.SECONDS)
+    }
+
+    private val allStopped = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** サーバーと音楽ブラウザまで止める（二重に呼んでも1回だけ）。UI スレッドで呼ぶ。 */
+    fun stopAll() {
+        if (!allStopped.compareAndSet(false, true)) return
+        stop()
+        try { music.shutdown() } catch (_: Exception) { }
     }
 
     fun stop() {

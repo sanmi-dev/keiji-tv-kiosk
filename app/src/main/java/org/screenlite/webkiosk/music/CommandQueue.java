@@ -30,6 +30,8 @@ public final class CommandQueue {
             case "text": value = f.get("value"); if (value == null || value.isEmpty() || value.length() > 500) throw bad(); break;
             case "key": value = f.get("value"); if (value == null || !KEYS.contains(value)) throw bad(); break;
             case "preset": value = f.get("value"); if (!"youtube".equals(value) && !"mp3".equals(value)) throw bad(); break;
+            case "scrollTo": y = unit(f.get("y")); break;
+            case "checkUpdate": break;
             case "stop": case "back": case "forward": case "reload": break;
             default: throw bad();
         }
