@@ -1,8 +1,10 @@
 package org.screenlite.webkiosk.app
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Base64
 import android.util.Log
 import android.webkit.WebView
@@ -175,8 +177,10 @@ class MusicHub(context: Context, private val music: RemoteMusicView) {
             val sendKey = !prefs.getBoolean("key_sent", false)
             val keyB64 = if (sendKey) prefs.getString("key_b64", "") ?: "" else ""
             val ts = System.currentTimeMillis()
-            val sig = Registration.sign(key, store, ip, p, dev, ts)
-            val body = Registration.formBody(store, ip, p, dev, keyB64, ts, sig).toByteArray(Charsets.UTF_8)
+            val ver = org.screenlite.webkiosk.BuildConfig.VERSION_CODE
+            val ovl = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(app)
+            val sig = Registration.sign(key, store, ip, p, dev, ts, ver, ovl)
+            val body = Registration.formBody(store, ip, p, dev, keyB64, ts, sig, ver, ovl).toByteArray(Charsets.UTF_8)
             val c = URL(EXEC).openConnection() as HttpURLConnection
             try {
                 c.connectTimeout = 15000; c.readTimeout = 20000

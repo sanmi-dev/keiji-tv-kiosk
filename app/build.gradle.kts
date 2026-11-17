@@ -12,8 +12,8 @@ android {
         applicationId = "jp.sanmi.keijitv"
         minSdk = 22
         targetSdk = 36
-        versionCode = 1007
-        versionName = "keiji-1.2.2"
+        versionCode = 1008
+        versionName = "keiji-1.2.3"
     }
 
     signingConfigs {

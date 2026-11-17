@@ -1,5 +1,10 @@
 package org.screenlite.webkiosk.components
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -113,6 +118,15 @@ fun SettingsScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End)
             ) {
+                // 電源オン時の自動起動に必要な許可。Android 6 未満には許可の仕組みが無いので出さない。
+                if (Build.VERSION.SDK_INT >= 23) {
+                    FocusableButton(
+                        text = "重ねて表示の設定を開く",
+                        onClick = { openOverlaySettings(context) },
+                        background = MaterialTheme.colorScheme.surface
+                    )
+                }
+
                 FocusableButton(
                     text = stringResource(R.string.button_cancel),
                     onClick = { (context as? ComponentActivity)?.finish() },
@@ -154,6 +168,28 @@ fun SettingsScreen() {
                     background = MaterialTheme.colorScheme.primary
                 )
             }
+        }
+    }
+}
+
+/** 「他のアプリの上に重ねて表示」の設定を開く。機種で開けなければ一段ずつ広い画面へ。全部だめでも落とさない。 */
+@androidx.annotation.RequiresApi(23)
+private fun openOverlaySettings(context: Context) {
+    val tries = listOf(
+        { Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + context.packageName)) },
+        { Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION) },
+        { Intent(Settings.ACTION_SETTINGS) }
+    )
+    for (make in tries) {
+        try {
+            val intent = make()
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            // 設定している間に掲示が前面へ戻って邪魔しないよう、見回りを一時休止する
+            StayOnTopService.pauseForSettings()
+            return
+        } catch (_: Exception) {
+            // 次の候補へ
         }
     }
 }

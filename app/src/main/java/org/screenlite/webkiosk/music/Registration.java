@@ -29,6 +29,29 @@ public final class Registration {
             return sb.toString();
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
+    /** 新形式: 版（versionCode）と重ねて表示の許可の有無も署名に含める。 */
+    public static String sign(byte[] key, String store, String ip, int port, String deviceId, long ts, int ver, boolean ovl) {
+        return hmacHex(key, store + "|" + ip + "|" + port + "|" + deviceId + "|" + ts + "|" + ver + "|" + (ovl ? "1" : "0"));
+    }
+    private static String hmacHex(byte[] key, String msg) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(key, "HmacSHA256"));
+            byte[] d = mac.doFinal(msg.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte x : d) sb.append(String.format("%02x", x & 0xff));
+            return sb.toString();
+        } catch (Exception e) { throw new IllegalStateException(e); }
+    }
+    /** 新形式の送信本文（&sig の後に &ver と &ovl、その後に初回だけ &key）。 */
+    public static String formBody(String store, String ip, int port, String deviceId, String keyB64, long ts, String sig, int ver, boolean ovl) {
+        StringBuilder sb = new StringBuilder("mode=tvaddr");
+        sb.append("&store=").append(enc(store)).append("&ip=").append(enc(ip)).append("&port=").append(port)
+          .append("&device=").append(enc(deviceId)).append("&ts=").append(ts).append("&sig=").append(enc(sig))
+          .append("&ver=").append(ver).append("&ovl=").append(ovl ? "1" : "0");
+        if (keyB64 != null && !keyB64.isEmpty()) sb.append("&key=").append(enc(keyB64));
+        return sb.toString();
+    }
     public static String formBody(String store, String ip, int port, String deviceId, String keyB64, long ts, String sig) {
         StringBuilder sb = new StringBuilder("mode=tvaddr");
         sb.append("&store=").append(enc(store)).append("&ip=").append(enc(ip)).append("&port=").append(port)

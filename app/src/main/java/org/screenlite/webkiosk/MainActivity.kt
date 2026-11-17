@@ -2,7 +2,12 @@ package org.screenlite.webkiosk
 
 import android.app.Activity
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -14,6 +19,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
@@ -23,6 +30,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.viewinterop.AndroidView
 import org.screenlite.webkiosk.app.RemoteMusicView
 import androidx.compose.ui.Alignment
@@ -42,6 +50,7 @@ import org.screenlite.webkiosk.app.TapUnlockHandler
 import org.screenlite.webkiosk.components.MainScreen
 import org.screenlite.webkiosk.components.TouchKioskInputOverlay
 import org.screenlite.webkiosk.components.TvKioskInputOverlay
+import org.screenlite.webkiosk.data.AutoStart
 import org.screenlite.webkiosk.data.KioskSettingsFactory
 import org.screenlite.webkiosk.ui.theme.ScreenliteWebKioskTheme
 import org.screenlite.webkiosk.ui.theme.isTvDevice
@@ -51,6 +60,18 @@ private const val BACK_HOLD_MS = 3000L
 class MainActivity : ComponentActivity() {
     private lateinit var unlockHandler: TapUnlockHandler
     lateinit var idleController: IdleBrightnessController
+    /** 「他のアプリの上に重ねて表示」が未許可で、電源オン時に自動で起動できない状態なら true。 */
+    val overlayNotice = mutableStateOf(false)
+    private val noticeHandler = Handler(Looper.getMainLooper())
+    private var noticeShownAt = 0L
+    private var noticeGranted = true
+    // 表示に戻ってから2分たったら帯を消す（法定掲示を長く覆わない）
+    private val hideNotice = Runnable { overlayNotice.value = false }
+
+    private fun updateOverlayNotice() {
+        val ms = SystemClock.elapsedRealtime() - noticeShownAt
+        overlayNotice.value = AutoStart.showNotice(Build.VERSION.SDK_INT, noticeGranted, ms)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,11 +125,18 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         super.onPause()
         idleController.stop()
+        noticeHandler.removeCallbacks(hideNotice)
     }
 
     override fun onResume() {
         super.onResume()
         idleController.start()
+        // 設定画面で許可して戻ってきたら注意を消せるよう、表示に戻るたびに確かめる
+        noticeGranted = Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this)
+        noticeShownAt = SystemClock.elapsedRealtime()
+        updateOverlayNotice()
+        noticeHandler.removeCallbacks(hideNotice)
+        if (overlayNotice.value) noticeHandler.postDelayed(hideNotice, AutoStart.NOTICE_SHOW_MS)
     }
 }
 
@@ -124,6 +152,7 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
     }
     val pinText by musicHub.pinText
     val idleController = remember { (activity as MainActivity).idleController }
+    val showOverlayNotice by (activity as MainActivity).overlayNotice
     val isIdleMode by idleController.isIdleMode.collectAsState()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -151,18 +180,34 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
         Box(Modifier.fillMaxSize().background(Color.Black))
         MainScreen(activity = activity, modifier = Modifier.fillMaxSize())
 
-        // 店のPCが番号を求めたときだけ、右下に小さく2分間出す
-        pinText?.let { pin ->
-            androidx.compose.material3.Text(
-                text = "音楽の接続番号 $pin",
-                color = Color.White,
-                fontSize = androidx.compose.ui.unit.TextUnit(28f, androidx.compose.ui.unit.TextUnitType.Sp),
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(24.dp)
-                    .background(Color(0xCC1E3A5F))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            )
+        // 下端: 自動起動できない注意の帯（掲示全体は覆わない）。音楽の接続番号はその上の右端に出して重ねない。
+        Column(
+            modifier = Modifier.align(Alignment.BottomEnd).fillMaxWidth(),
+            horizontalAlignment = Alignment.End
+        ) {
+            // 店のPCが番号を求めたときだけ、右下に小さく2分間出す
+            pinText?.let { pin ->
+                androidx.compose.material3.Text(
+                    text = "音楽の接続番号 $pin",
+                    color = Color.White,
+                    fontSize = androidx.compose.ui.unit.TextUnit(28f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    modifier = Modifier
+                        .padding(24.dp)
+                        .background(Color(0xCC1E3A5F))
+                        .padding(horizontal = 20.dp, vertical = 10.dp)
+                )
+            }
+            if (showOverlayNotice) {
+                androidx.compose.material3.Text(
+                    text = AutoStart.NOTICE,
+                    color = Color.White,
+                    fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xEEB71C1C))
+                        .padding(horizontal = 32.dp, vertical = 14.dp)
+                )
+            }
         }
 
         // サンミ改造: テレビでは入力をふさぐ板（TvKioskInputOverlay）を置かない

@@ -4,14 +4,18 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.screenlite.webkiosk.MainActivity
+import org.screenlite.webkiosk.data.AutoStart
 import org.screenlite.webkiosk.data.KioskSettingsFactory
 
 class StayOnTopService : Service() {
@@ -29,6 +34,14 @@ class StayOnTopService : Service() {
 
         @Volatile
         var isActivityVisible = false
+
+        /** この時刻（elapsedRealtime）までは前面に戻さない。設定画面を開いたとき用。 */
+        @Volatile
+        var pauseUntil = 0L
+
+        fun pauseForSettings() {
+            pauseUntil = SystemClock.elapsedRealtime() + AutoStart.SETTINGS_PAUSE_MS
+        }
 
         fun restart(context: Context) {
             if (isRunning) {
@@ -44,12 +57,25 @@ class StayOnTopService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var visibilityJob: Job? = null
 
+    // 待機からの復帰（画面オン・ロック解除）では BOOT_COMPLETED が来ないので、ここで前面に戻す
+    private val wakeTask = Runnable {
+        if (AutoStart.shouldBringToFront(isActivityVisible, SystemClock.elapsedRealtime(), pauseUntil)) bringAppToFront()
+    }
+    private val wakeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.i("StayOnTopService", "Wake broadcast: ${intent?.action}")
+            handler.removeCallbacks(wakeTask)
+            handler.postDelayed(wakeTask, 1500L)
+        }
+    }
+    private var wakeReceiverRegistered = false
+
     private val checkTask = object : Runnable {
         override fun run() {
-            if (!isActivityVisible) {
+            if (AutoStart.shouldBringToFront(isActivityVisible, SystemClock.elapsedRealtime(), pauseUntil)) {
                 bringAppToFront()
             } else {
-                Log.i("StayOnTopService", "Activity is already visible, skipping bring to front")
+                Log.i("StayOnTopService", "Activity is visible or paused for settings, skipping bring to front")
             }
             handler.postDelayed(this, checkInterval)
         }
@@ -68,6 +94,17 @@ class StayOnTopService : Service() {
         }
 
         startForegroundService()
+        try {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            // USER_PRESENT は SystemUI から送られ NOT_EXPORTED では届かない。どちらも保護ブロードキャストで他アプリは偽装できない
+            ContextCompat.registerReceiver(this, wakeReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
+            wakeReceiverRegistered = true
+        } catch (e: Exception) {
+            Log.e("StayOnTopService", "Failed to register wake receiver: ${e.message}")
+        }
         handler.post(checkTask)
         isRunning = true
         Log.i("StayOnTopService", "Service created")
@@ -76,6 +113,11 @@ class StayOnTopService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(checkTask)
+        handler.removeCallbacks(wakeTask)
+        if (wakeReceiverRegistered) {
+            try { unregisterReceiver(wakeReceiver) } catch (_: Exception) { }
+            wakeReceiverRegistered = false
+        }
         visibilityJob?.cancel()
         serviceScope.cancel()
         isRunning = false
