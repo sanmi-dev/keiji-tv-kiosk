@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>音楽の操作（掲示物テレビ）モック</title>
+<style>
+  :root { --accent:#2a6f5f; --bg:#f7f7f2; --card:#fff; --line:#d5ddd8; --text:#222; --muted:#555; --danger:#c33; --warn:#d9822b; --pale:#e8f1ee; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Yu Gothic UI", sans-serif; background:var(--bg); color:var(--text); }
+  button { font: inherit; cursor:pointer; border-radius:8px; border:1px solid var(--accent); background:var(--accent); color:#fff; padding:8px 16px; min-height:44px; }
+  button.ghost { background:#fff; color:var(--accent); }
+  button:active { transform: translateY(1px); filter: brightness(.92); }
+  header { background:var(--accent); color:#fff; display:flex; align-items:center; gap:10px; padding:10px 16px; }
+  header h1 { font-size:1.1rem; margin:0; flex:1; }
+  header .sq { width:26px; height:26px; background:#fff; border-radius:4px; }
+  .badge { background:#fff; color:var(--accent); border-radius:999px; padding:2px 12px; font-size:.85rem; }
+  .wrap { max-width:1340px; margin:16px auto; padding:0 16px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .row .grow { flex:1; }
+  label.lbl { display:block; font-size:.85rem; color:var(--muted); margin-bottom:4px; }
+  input[type=text] { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:8px; min-height:44px; }
+  .frame { background:#1f2430; border-radius:8px; aspect-ratio:16/9; display:flex; align-items:center; justify-content:center; color:#cbd5e1; position:relative; overflow:hidden; }
+  .fake { width:70%; text-align:center; }
+  .fake .vid { background:#000; aspect-ratio:16/9; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:3rem; color:#fff; }
+  .fake p { margin:8px 0 0; }
+  .note { font-size:.85rem; color:var(--muted); }
+  .songs { list-style:none; margin:8px 0 0; padding:0; }
+  .songs li { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding:6px 0; }
+  .drop { border:2px dashed var(--accent); background:var(--pale); border-radius:10px; padding:18px; text-align:center; color:var(--accent); }
+  .tag { font-size:.75rem; background:var(--pale); color:var(--accent); border-radius:6px; padding:2px 8px; }
+
+  /* ===== ブラウザモード ===== */
+  #browser { position:fixed; inset:0; background:#dee3e1; display:none; flex-direction:column; z-index:10; }
+  #browser.on { display:flex; }
+  .bar { display:flex; align-items:center; gap:6px; padding:6px 8px; background:#eef2f0; border-bottom:1px solid var(--line); }
+  .bar button { min-height:40px; padding:6px 12px; }
+  .icon { width:40px; padding:0 !important; font-size:1.2rem; background:transparent; color:#333; border-color:transparent; }
+  .icon:hover { background:#dfe6e3; }
+  .addr { flex:1; border-radius:999px !important; background:#fff; }
+  .close { background:#fff; color:var(--accent); }
+  .sb { width:64px; display:flex; flex-direction:column; gap:6px; padding:6px; background:#eef2f0; border-left:1px solid var(--line); }
+  .sb button { width:52px; min-height:48px; padding:0; font-size:1.1rem; }
+  .track { flex:1; background:#dfe6e3; border-radius:8px; position:relative; cursor:pointer; }
+  .thumb { position:absolute; left:4px; right:4px; top:20%; height:22%; background:var(--accent); border-radius:6px; cursor:grab; }
+  #screen { flex:1; margin:0; border-radius:0; aspect-ratio:auto; outline:none; cursor:default; }
+  #screen.kb { box-shadow: inset 0 0 0 4px #3ddc97; }
+  .status { display:flex; gap:16px; align-items:center; padding:4px 12px; font-size:.85rem; background:#f7f7f2; border-top:1px solid var(--line); color:var(--muted); }
+  .kbon { color:#167a56; font-weight:600; }
+  .callout { position:absolute; background:#fff8e1; color:#5b4500; border:1px solid #e9c46a; border-radius:8px; padding:6px 10px; font-size:.8rem; max-width:240px; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+<!-- ===================== 基本モード（今の画面＋追加） ===================== -->
+<header><span class="sq"></span><h1>音楽の操作（掲示物テレビ）</h1><span class="badge">テレビに接続中</span></header>
+<div class="wrap">
+  <div class="card">
+    <div class="row">
+      <button>MP3（いつもの曲）</button>
+      <button class="ghost">YouTube（テスト曲）</button>
+      <span class="grow"></span>
+      <button class="ghost">停止</button>
+      <button class="ghost">アップデート</button>
+    </div>
+    <div style="margin-top:12px">
+      <label class="lbl" for="addr1">URL または検索する言葉</label>
+      <div class="row"><input id="addr1" type="text" class="grow" placeholder="例: https://www.youtube.com/watch?v=…"><button>開く／検索</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="grow"><b>MP3（いつもの曲）</b><div class="note">http://127.0.0.1:8787/mp3</div></div>
+      <button id="openBrowser">🖥 ブラウザモードで操作する</button>
+    </div>
+    <div class="frame" style="margin-top:10px; max-height:360px">
+      <div class="fake"><div class="vid">♪</div><p>テレビの裏の音楽画面（縮小）</p></div>
+    </div>
+    <p class="note">細かい操作（クリック・文字入力・スクロール）は「ブラウザモードで操作する」から。</p>
+  </div>
+
+  <div class="card">
+    <b>テレビの曲（MP3）</b> <span class="tag">新規</span>
+    <p class="note" style="margin:4px 0 8px">電源を入れると、いつもこの曲が流れます（上から順にくり返し）。</p>
+    <div class="drop">ここに MP3 ファイルをドラッグ<br>または <button class="ghost" style="margin-top:6px">PC から選ぶ</button></div>
+    <ul class="songs">
+      <li><span>1. 朝の待合.mp3（3:12）</span><span class="row"><button class="ghost">▲</button><button class="ghost">▼</button><button class="ghost">外す</button></span></li>
+      <li><span>2. やわらかピアノ.mp3（4:05）</span><span class="row"><button class="ghost">▲</button><button class="ghost">▼</button><button class="ghost">外す</button></span></li>
+      <li><span>3. 午後のギター.mp3（2:58）</span><span class="row"><button class="ghost">▲</button><button class="ghost">▼</button><button class="ghost">外す</button></span></li>
+    </ul>
+    <p class="note">テレビの空き: 約 1.2GB ／ 1曲 30MB まで</p>
+  </div>
+</div>
+
+<!-- ===================== ブラウザモード（画面いっぱい） ===================== -->
+<div id="browser">
+  <div class="bar">
+    <button class="close" id="closeBrowser" title="基本モードに戻る">✕ 基本モードに戻る</button>
+    <button class="icon" title="戻る">←</button>
+    <button class="icon" title="進む">→</button>
+    <button class="icon" title="再読込">⟳</button>
+    <input type="text" class="addr" value="https://www.youtube.com/watch?v=RY11iULaX7E" aria-label="アドレス">
+    <button class="ghost">MP3 に戻す</button>
+    <button class="ghost">停止</button>
+  </div>
+  <div style="flex:1; display:flex; min-height:0">
+  <div class="frame" id="screen" tabindex="0" style="flex:1">
+    <div class="fake" style="width:60%"><div class="vid">▶</div><p>テレビのブラウザの中身（PC の画面いっぱいに表示）</p></div>
+    <div class="callout" style="top:16px; left:16px">クリック → テレビの同じ場所をタップ<br>スクロール → ホイール／右のバー（▲▼・つまみ）／キーボードの PageUp・PageDown・↑↓</div>
+    <div class="callout" style="bottom:16px; right:16px">画面をクリックすると<b>キーボード入力がテレビへ</b>（枠が緑に）。Esc 長押しで解除</div>
+  </div>
+  <!-- ホイールが無くてもスクロールできる縦のスクロールバー -->
+  <div class="sb" aria-label="テレビのページのスクロール">
+    <button class="ghost" title="ページの一番上へ">⤒</button>
+    <button class="ghost" title="1画面分 上へ">▲</button>
+    <div class="track" title="クリックかドラッグでその位置へ"><div class="thumb"></div></div>
+    <button class="ghost" title="1画面分 下へ">▼</button>
+    <button class="ghost" title="ページの一番下へ">⤓</button>
+  </div>
+  </div>
+  <div class="status">
+    <span id="kb">キーボード: PC のまま（画面をクリックでテレビへ）</span>
+    <span>反応までの目安: 約1秒</span>
+    <span style="margin-left:auto">テレビに接続中</span>
+  </div>
+</div>
+
+<script>
+  var b = document.getElementById('browser'), s = document.getElementById('screen'), kb = document.getElementById('kb');
+  document.getElementById('openBrowser').onclick = function () { b.classList.add('on'); };
+  document.getElementById('closeBrowser').onclick = function () { b.classList.remove('on'); s.classList.remove('kb'); };
+  s.onclick = function () { s.classList.add('kb'); kb.textContent = 'キーボード: テレビへ送信中（Esc 長押しで解除）'; kb.className = 'kbon'; };
+</script>
+</body>
+</html>

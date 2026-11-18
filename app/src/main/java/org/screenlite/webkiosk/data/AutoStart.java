@@ -27,4 +27,14 @@ public final class AutoStart {
     public static boolean shouldBringToFront(boolean visible, long now, long pauseUntil) {
         return !visible && now >= pauseUntil;
     }
+
+    /** 「ホームに出たとき自動で掲示に戻る」の既定値（オン）。 */
+    public static final boolean AUTO_RETURN_DEFAULT = true;
+
+    /** 定期の見回りで前面に戻すか。設定がオフなら戻さない（画面が点いたとき・起動時は設定に関係なく戻す）。 */
+    public static boolean patrolEnabled(boolean setting, boolean shownOnce) { return setting || !shownOnce; }
+
+    public static boolean shouldPatrolReturn(boolean enabled, boolean visible, long now, long pauseUntil) {
+        return enabled && shouldBringToFront(visible, now, pauseUntil);
+    }
 }

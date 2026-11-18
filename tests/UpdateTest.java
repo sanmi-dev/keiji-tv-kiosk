@@ -113,6 +113,52 @@ public class UpdateTest {
     String rv = read("app/src/main/java/org/screenlite/webkiosk/app/RemoteMusicView.java");
     eq("スクロールの予備（window.scrollBy / window.scrollTo）", true, rv.contains("window.scrollBy") && rv.contains("window.scrollTo"));
 
+    // ===== 1.2.6 Fable レビュー対応 =====
+    String ka = read("app/src/main/java/org/screenlite/webkiosk/app/KioskApplication.kt");
+    // MAJOR-1 更新確認はアプリ全体の起動で始める（掲示画面が落ちる版でも動く）
+    eq("M1: KioskApplication.onCreate で更新確認を始める", true, ka.contains("UpdateManager.start("));
+    eq("M1: MainActivity では始めない", false, ma.contains("UpdateManager.start("));
+    // MAJOR-2 重ねて表示が未許可なら「開く」を押す案内
+    eq("M2: 未許可なら案内文", true, UpdateCheck.overlayNote(false).contains("『開く』"));
+    eq("M2: 許可済みなら案内なし", "", UpdateCheck.overlayNote(true));
+    eq("M2: install で重ねて表示の許可を見る", true, um.contains("canDrawOverlays") && um.contains("overlayNote"));
+    // MAJOR-3 設定を開く前に「更新待ち」を保存、起動時は早めに確認
+    eq("M3: 更新待ちなら5秒後に確認", 5_000L, UpdateCheck.firstDelayMs(true));
+    eq("M3: 通常は60秒後", 60_000L, UpdateCheck.firstDelayMs(false));
+    eq("M3: 更新待ちを SharedPreferences に保存", true, um.contains("getSharedPreferences") && um.contains("UpdateCheck.PREF_PENDING"));
+    eq("M3: 起動時に更新待ちを読んで初回の待ちを決める", true, um.contains("firstDelayMs("));
+    // MAJOR-4 全画面の暗幕をやめ、下端の帯にする
+    eq("M4: 全画面の暗幕(0x99000000)なし", false, ma.contains("0x99000000"));
+    eq("M4: ポップアップは下端に寄せる", true, java.util.regex.Pattern.compile("UpdatePopup[\\s\\S]{0,1500}?BottomCenter").matcher(ma).find());
+    // MINOR④ ダウンロード全体の締め切り10分
+    eq("m4: 全体の締め切り10分", 10L * 60 * 1000, UpdateCheck.DOWNLOAD_TOTAL_MS);
+    eq("m4: 10分ちょうどまでは続ける", false, UpdateCheck.downloadExpired(0, 10L * 60 * 1000));
+    eq("m4: 10分を超えたら打ち切る", true, UpdateCheck.downloadExpired(0, 10L * 60 * 1000 + 1));
+    eq("m4: 締め切りが download でつながっている", true, um.contains("downloadExpired("));
+    // MINOR③ 暗転中の決定キーは暗転を解くだけ
+    eq("m3: 暗転中かを onUserInteraction の前に取る", true,
+        java.util.regex.Pattern.compile("dispatchKeyEvent[\\s\\S]{0,200}?isIdleMode\\.value[\\s\\S]{0,200}?onUserInteraction").matcher(ma).find());
+    eq("m3: 暗転中は install しない判定", true, UpdateCheck.shouldInstallOnKey(false) && !UpdateCheck.shouldInstallOnKey(true));
+    eq("m3: 判定が MainActivity でつながっている", true, ma.contains("shouldInstallOnKey("));
+    // MINOR⑤ apk が読めないときは「壊れています」
+    eq("m5: 壊れた apk の文言", true, UpdateCheck.MSG_BROKEN_APK.contains("壊れて"));
+    eq("m5: 読めない apk は壊れている扱い", true, um.contains("MSG_BROKEN_APK"));
+
+    // ===== アップデートボタンの結果をはっきり伝える（Mizore「静かに終わる」11-18） =====
+    eq("U1: 曖昧な「新しい版があれば」を出さない", false, store.contains("新しい版があれば"));
+    eq("U2: 押した直後に「確かめています」", true, store.contains("テレビに確かめています"));
+    eq("U3: 結果を目立つ行(#msg)にも出す", true,
+        java.util.regex.Pattern.compile("function showUpdate[\\s\\S]{0,1500}?\\$\\('msg'\\)\\.textContent").matcher(store).find());
+    eq("U4: 結果をお知らせ(トースト)でも出す", true,
+        java.util.regex.Pattern.compile("function showUpdate[\\s\\S]{0,1500}?toast\\(").matcher(store).find() && store.contains("id=\"toast\""));
+    eq("U5: 最新ならいまの版を添える", true, store.contains("最新です（いまの版 "));
+    eq("U6: 新しい版の番号を添える", true, store.contains("新しい版があります（版 "));
+    String rv2 = read("app/src/main/java/org/screenlite/webkiosk/app/RemoteMusicView.java");
+    eq("U7: テレビが新しい版の番号を状態に載せる", true, rv2.contains(".put(\"newer\", UpdateManager.getNewerCode()"));
+    eq("U9: テレビが応答しなくても40秒で「まだ届きません」を出す（状態の取得に頼らない）", true,
+        java.util.regex.Pattern.compile("updWaiting = Date\\.now\\(\\);[\\s\\S]{0,300}?setTimeout\\(").matcher(store).find());
+    eq("U8: UpdateManager が番号を返す", true, um.contains("fun getNewerCode()"));
+
     System.out.println(failed == 0 ? "ALL PASS (" + passed + ")" : failed + " FAILED / " + passed + " passed");
     if (failed > 0) System.exit(1);
   }

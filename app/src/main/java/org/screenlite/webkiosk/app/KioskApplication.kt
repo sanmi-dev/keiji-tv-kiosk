@@ -12,6 +12,8 @@ class KioskApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // 起動の約60秒後（更新待ちなら5秒後）と3時間ごとに新しい版を確かめる（画面が落ちても動くようアプリ全体で）
+        UpdateManager.start(this)
 
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {

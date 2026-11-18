@@ -118,6 +118,9 @@ fun SettingsScreen() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.End)
             ) {
+                // ホームに出たとき自動で掲示に戻るか（押すとすぐ保存）
+                org.screenlite.webkiosk.AutoReturnToggle()
+
                 // 電源オン時の自動起動に必要な許可。Android 6 未満には許可の仕組みが無いので出さない。
                 if (Build.VERSION.SDK_INT >= 23) {
                     FocusableButton(

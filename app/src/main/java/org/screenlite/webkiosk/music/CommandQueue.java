@@ -9,7 +9,8 @@ public final class CommandQueue {
         public Command(long id, String action, String value, double x, double y, int dy) { this.id = id; this.action = action; this.value = value; this.x = x; this.y = y; this.dy = dy; }
     }
     static final Set<String> KEYS = new HashSet<>(Arrays.asList(
-        "Enter", "Tab", "Backspace", "Escape", "Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"));
+        "Enter", "Tab", "Backspace", "Escape", "Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+        "PageUp", "PageDown", "Home", "End", "Delete"));
     private final int max;
     private final ArrayDeque<Command> q = new ArrayDeque<>();
     private long seq = 0;
@@ -31,6 +32,8 @@ public final class CommandQueue {
             case "key": value = f.get("value"); if (value == null || !KEYS.contains(value)) throw bad(); break;
             case "preset": value = f.get("value"); if (!"youtube".equals(value) && !"mp3".equals(value)) throw bad(); break;
             case "scrollTo": y = unit(f.get("y")); break;
+            case "cast": value = f.get("value"); if (!okCast(value)) throw bad(); break;
+            case "autoReturn": value = f.get("value"); if (!"on".equals(value) && !"off".equals(value)) throw bad(); break;
             case "checkUpdate": break;
             case "stop": case "back": case "forward": case "reload": break;
             default: throw bad();
@@ -60,6 +63,21 @@ public final class CommandQueue {
             URI u = new URI(v);
             String s = u.getScheme();
             return ("http".equalsIgnoreCase(s) || "https".equalsIgnoreCase(s)) && u.getHost() != null;
+        } catch (Exception e) { return false; }
+    }
+    static final Set<String> CAST_HOSTS = new HashSet<>(Arrays.asList(
+        "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"));
+    /** テレビに映すリンク: https・YouTube のホストだけ・userinfo とポート指定は不可・2048字以内。 */
+    public static boolean okCast(String v) {
+        if (v == null || v.isEmpty() || v.length() > 2048) return false;
+        try {
+            URI u = new URI(v);
+            if (!"https".equalsIgnoreCase(u.getScheme())) return false;
+            if (u.getRawUserInfo() != null || u.getPort() != -1) return false;
+            String auth = u.getRawAuthority();
+            if (auth == null || auth.indexOf('@') >= 0) return false;
+            String host = u.getHost();
+            return host != null && CAST_HOSTS.contains(host.toLowerCase(Locale.ROOT));
         } catch (Exception e) { return false; }
     }
     static Map<String, String> parseFormSafe(String body) {

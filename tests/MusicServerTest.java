@@ -154,7 +154,7 @@ public class MusicServerTest {
       "action=click&x=1.5&y=0.2", "action=click&x=-0.1&y=0.2", "action=click&x=abc&y=0.2", "action=click&x=NaN&y=0.2",
       "action=scroll&dy=999999", "action=scroll&dy=1.5",
       "action=text&value=" + "a".repeat(501), "action=text&value=",
-      "action=key&value=Delete", "action=preset&value=spotify"
+      "action=key&value=F13", "action=preset&value=spotify"
     };
     for (String b : bad) check("C3 不正な操作は拒否: " + (b.length() > 50 ? b.substring(0, 50) + "…" : b), () -> {
       CommandQueue q = new CommandQueue(100);

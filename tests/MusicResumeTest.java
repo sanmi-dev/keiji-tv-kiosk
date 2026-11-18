@@ -24,10 +24,11 @@ public class MusicResumeTest {
     for (int i = 0; i < 3000; i++) longUrl.append('x');
     eq("長すぎるURLは保存しない", null, MusicResume.toSaved(longUrl.toString()));
     // 起動時に開くページ
-    eq("保存なしは初期ページ", HOME, MusicResume.startUrl(null, HOME, 8787));
+    // 1.2.6（Mizore 11-18「電源オンは MP3 に戻す」）: 保存の中身に関係なく起動は MP3
+    eq("保存なしでも MP3", "http://127.0.0.1:8787/mp3", MusicResume.startUrl(null, HOME, 8787));
     eq("保存が mp3 なら今のポートのMP3ページ", "http://127.0.0.1:9000/mp3", MusicResume.startUrl("mp3", HOME, 9000));
-    eq("保存が https なら そのページ", "https://www.youtube.com/watch?v=A&list=L", MusicResume.startUrl("https://www.youtube.com/watch?v=A&list=L", HOME, 8787));
-    eq("保存が壊れていたら初期ページ", HOME, MusicResume.startUrl("http://evil/", HOME, 8787));
+    eq("保存が https でも MP3", "http://127.0.0.1:8787/mp3", MusicResume.startUrl("https://www.youtube.com/watch?v=A&list=L", HOME, 8787));
+    eq("保存が壊れていても MP3", "http://127.0.0.1:8787/mp3", MusicResume.startUrl("http://evil/", HOME, 8787));
     System.out.println(failed == 0 ? "ALL PASS (" + passed + ")" : failed + " FAILED / " + passed + " passed");
     if (failed > 0) System.exit(1);
   }

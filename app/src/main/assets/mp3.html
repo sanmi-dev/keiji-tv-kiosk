@@ -25,30 +25,73 @@
   <audio id="audio" preload="auto"></audio>
 </main>
 <script>
-  var TRACKS = [
+  var BUILTIN = [
     { file: '/mp3/morning-light.mp3', name: 'Morning Light' },
     { file: '/mp3/quiet-garden.mp3', name: 'Quiet Garden' },
     { file: '/mp3/soft-breeze.mp3', name: 'Soft Breeze' }
   ];
+  var TRACKS = BUILTIN;
+  var mine = false;
   var i = 0;
+  var okInRound = false;   // この一周で1曲でも再生できたか
+  var allFailed = false;   // 前の一周で送った曲が全部失敗した（その一周は同梱曲にする）
   var audio = document.getElementById('audio');
   function $(id) { return document.getElementById(id); }
   function label() { $('play').textContent = audio.paused ? '再生' : '一時停止'; }
   function load(n) {
-    i = (n + TRACKS.length) % TRACKS.length;
+    i = n;
     audio.src = TRACKS[i].file;
     $('title').textContent = TRACKS[i].name;
-    $('sub').textContent = (i + 1) + ' / ' + TRACKS.length + '（オリジナル曲・繰り返し再生）';
+    $('sub').textContent = (i + 1) + ' / ' + TRACKS.length + (mine ? '（送った曲・上から順に繰り返し）' : '（オリジナル曲・繰り返し再生）');
     var p = audio.play();
     if (p && p.catch) p.catch(function () { label(); });
   }
-  audio.addEventListener('ended', function () { load(i + 1); });
+  // PC から送った曲の一覧を読む（無い・読めなければ null）
+  function loadList(cb) {
+    var x = new XMLHttpRequest();
+    var called = false;
+    function done(list) { if (called) return; called = true; cb(list); }
+    x.open('GET', '/mp3/list');
+    x.timeout = 5000;
+    x.onload = function () {
+      var out = [];
+      try {
+        var d = JSON.parse(x.responseText);
+        (d.songs || []).forEach(function (s) {
+          if (s && /^[a-z0-9]{1,24}$/.test(s.id)) out.push({ file: '/mp3/s/' + s.id, name: String(s.name || '').replace(/\.mp3$/i, '') });
+        });
+      } catch (e) { out = []; }
+      done(x.status === 200 && out.length ? out : null);
+    };
+    x.onerror = function () { done(null); };
+    x.ontimeout = function () { done(null); };
+    x.send();
+  }
+  // 一周の始まり: 一覧を取り直す。送った曲があれば上から、無い・読めない・前の一周が全部失敗なら同梱の3曲
+  function startRound() {
+    allFailed = mine && !okInRound;
+    okInRound = false;
+    loadList(function (list) {
+      if (list && !allFailed) { TRACKS = list; mine = true; }
+      else { TRACKS = BUILTIN; mine = false; }
+      load(0);
+    });
+  }
+  function next() {
+    if (i + 1 >= TRACKS.length) startRound();
+    else load(i + 1);
+  }
+  audio.addEventListener('ended', next);
+  audio.addEventListener('playing', function () { okInRound = true; });
   audio.addEventListener('play', label);
   audio.addEventListener('pause', label);
-  audio.addEventListener('error', function () { setTimeout(function () { load(i + 1); }, 3000); });
+  audio.addEventListener('error', function () { setTimeout(next, 3000); });
   $('play').addEventListener('click', function () { if (audio.paused) audio.play(); else audio.pause(); });
-  $('next').addEventListener('click', function () { load(i + 1); });
-  load(0);
+  $('next').addEventListener('click', next);
+  loadList(function (list) {
+    if (list) { TRACKS = list; mine = true; }
+    load(0);
+  });
 </script>
 </body>
 </html>

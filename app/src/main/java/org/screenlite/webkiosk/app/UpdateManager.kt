@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +42,9 @@ object UpdateManager {
     @JvmStatic fun getStatus(): String = statusValue
 
     /** 公開版の versionCode（新しいときだけ >0）。0 ならポップアップを出さない。 */
-    val newerCode = mutableStateOf(0)
+    @get:JvmName("newerCodeState") val newerCode = mutableStateOf(0)
+    @Volatile private var newerCodeMirror: Int = 0
+    @JvmStatic fun getNewerCode(): Int = newerCodeMirror
     /** ポップアップに出す補足（ダウンロード中・失敗理由など）。 */
     val message = mutableStateOf("")
     val working = mutableStateOf(false)
@@ -56,6 +59,15 @@ object UpdateManager {
 
     /** 落とした apk が公開版より古い（version.json だけ先に新しくなった瞬間など）。 */
     private class NotReadyException : Exception()
+    /** 落とした apk が読めない。 */
+    private class BrokenApkException : Exception()
+
+    /** 更新待ちフラグ（キー "update_pending" = UpdateCheck.PREF_PENDING）を置く場所。 */
+    private fun prefs(ctx: Context) = ctx.getSharedPreferences("update", Context.MODE_PRIVATE)
+    private fun clearPending() {
+        val ctx = appCtx ?: return
+        try { prefs(ctx).edit().remove(UpdateCheck.PREF_PENDING).apply() } catch (_: Throwable) { }
+    }
 
     private val periodic = object : Runnable {
         override fun run() {
@@ -72,10 +84,18 @@ object UpdateManager {
         }
     }
 
-    fun start() {
+    fun start(context: Context) {
         if (started) return
         started = true
-        ui.postDelayed(periodic, UpdateCheck.FIRST_DELAY_MS)
+        val ctx = context.applicationContext
+        appCtx = ctx
+        var pending = false
+        try {
+            val p = prefs(ctx)
+            pending = p.getBoolean(UpdateCheck.PREF_PENDING, false)
+            if (pending) p.edit().remove(UpdateCheck.PREF_PENDING).apply()
+        } catch (e: Throwable) { Log.w(TAG, "prefs: ${e.javaClass.simpleName}") }
+        ui.postDelayed(periodic, UpdateCheck.firstDelayMs(pending))
     }
 
     /** 店のPCからの「アップデート」。どのスレッドから呼んでもよい。手動の確認なので失敗回数を戻す。 */
@@ -97,7 +117,7 @@ object UpdateManager {
                         ui.post { onNewer(remote) }
                         "newer"
                     }
-                    else -> "latest"
+                    else -> { clearPending(); "latest" }
                 }
             } catch (e: Throwable) {
                 Log.w(TAG, "check failed: ${e.javaClass.simpleName}")
@@ -113,6 +133,7 @@ object UpdateManager {
             // 引っ込めたあとに同じ版でまた出すときは、1回失敗でまた引っ込める
             if (UpdateCheck.shouldHideAfterFailures(fails)) fails = UpdateCheck.MAX_INSTALL_FAILS - 1
             newerCode.value = remote
+            newerCodeMirror = remote
             message.value = ""
         }
     }
@@ -124,6 +145,7 @@ object UpdateManager {
         fails++
         if (UpdateCheck.shouldHideAfterFailures(fails)) {
             newerCode.value = 0
+            newerCodeMirror = 0
             message.value = ""
         } else {
             message.value = msg
@@ -193,6 +215,7 @@ object UpdateManager {
         if (Build.VERSION.SDK_INT >= 26 && !ctx.packageManager.canRequestPackageInstalls()) {
             try {
                 StayOnTopService.pauseForSettings()
+                try { prefs(ctx).edit().putBoolean(UpdateCheck.PREF_PENDING, true).apply() } catch (_: Throwable) { }
                 ctx.startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + ctx.packageName))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -208,12 +231,14 @@ object UpdateManager {
         ui.removeCallbacks(waitTimeout)
         abandonOld()
         working.value = true
-        message.value = "ダウンロードしています…"
+        val note = if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(ctx)) UpdateCheck.overlayNote(false) else ""
+        val suffix = if (note.isEmpty()) "" else "\n" + note
+        message.value = "ダウンロードしています…" + suffix
         worker.execute {
             val f = File(ctx.cacheDir, "update.apk")
             var stage = "download"
             try {
-                download(f)
+                download(f, suffix)
                 stage = "check"
                 checkArchive(ctx, f)
                 stage = "commit"
@@ -226,6 +251,8 @@ object UpdateManager {
                         ui.postDelayed(waitTimeout, UpdateCheck.WAIT_RESULT_MS)
                     }
                 }
+            } catch (e: BrokenApkException) {
+                ui.post { fail(UpdateCheck.MSG_BROKEN_APK) }
             } catch (e: NotReadyException) {
                 ui.post { fail("新しい版の準備がまだ終わっていません。少し待ってからもう一度押してください") }
             } catch (e: Throwable) {
@@ -241,7 +268,7 @@ object UpdateManager {
         }
     }
 
-    private fun download(f: File) {
+    private fun download(f: File, suffix: String) {
         val c = open(UpdateCheck.APK_URL)
         try {
             val total = c.contentLengthLong
@@ -249,14 +276,16 @@ object UpdateManager {
             c.inputStream.use { input ->
                 f.outputStream().use { out ->
                     val buf = ByteArray(64 * 1024); var done = 0L; var lastPct = -1
+                    val startMs = SystemClock.elapsedRealtime()
                     while (true) {
+                        if (UpdateCheck.downloadExpired(startMs, SystemClock.elapsedRealtime())) throw IOException("timeout")
                         val n = input.read(buf); if (n < 0) break
                         done += n
                         if (!UpdateCheck.withinLimit(done, UpdateCheck.MAX_APK_BYTES)) throw IOException("too large")
                         out.write(buf, 0, n)
                         if (total > 0) {
                             val pct = (done * 100 / total).toInt()
-                            if (pct != lastPct) { lastPct = pct; ui.post { if (working.value) message.value = "ダウンロードしています… $pct%" } }
+                            if (pct != lastPct) { lastPct = pct; ui.post { if (working.value) message.value = "ダウンロードしています… $pct%$suffix" } }
                         }
                     }
                 }
@@ -266,7 +295,7 @@ object UpdateManager {
 
     /** 落とした apk の版が今の版より新しいことを確かめる。読めなければ失敗扱い。 */
     private fun checkArchive(ctx: Context, f: File) {
-        val info = ctx.packageManager.getPackageArchiveInfo(f.path, 0) ?: throw NotReadyException()
+        val info = ctx.packageManager.getPackageArchiveInfo(f.path, 0) ?: throw BrokenApkException()
         val code: Int = if (Build.VERSION.SDK_INT >= 28) {
             val v = info.longVersionCode
             if (v < 0 || v > Int.MAX_VALUE) -1 else v.toInt()
@@ -304,6 +333,12 @@ object UpdateManager {
     }
 
     internal fun onResult(ctx: Context, intent: Intent) {
+        // いま待っている Session 以外（時間切れで捨てた Session の遅れた結果など）は捨てる。失敗を2回数えない
+        val sid = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        if (sid < 0 || sid != session.get()) {
+            Log.w(TAG, "ignore result of session $sid")
+            return
+        }
         val st = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
         if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
             @Suppress("DEPRECATION")
@@ -318,7 +353,7 @@ object UpdateManager {
             }
             if (!opened) ui.post { abandonOld(); fail("インストール画面を開けませんでした。もう一度押してください") }
         } else if (st == PackageInstaller.STATUS_SUCCESS) {
-            ui.post { ui.removeCallbacks(waitTimeout); session.set(-1); working.value = false }
+            ui.post { ui.removeCallbacks(waitTimeout); session.set(-1); working.value = false; clearPending() }
         } else {
             val m = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: ""
             ui.post { session.set(-1); fail("インストールできませんでした（$st $m）。もう一度押してください") }

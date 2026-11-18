@@ -4,6 +4,10 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -48,6 +52,15 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private long lastWatch = 0;
     private long lastUserCmd = -1;
     private volatile int scrollY = 0, scrollH = 0, clientH = 0;
+    // 起動直後などでページを開けなかったときの開き直し（UI スレッドだけで読み書き）
+    private String lastRequested = null;
+    private String failedUrl = null;
+    private boolean loadFailed = false;
+    private boolean retryPending = false;
+    private int retryAttempt = 0;
+    private final Runnable retryTask = this::retryNow;
+    private ConnectivityManager cm = null;
+    private ConnectivityManager.NetworkCallback netCallback = null;
     // YouTube のスマホ版は WebView.scrollBy では動かないので、ページの中でスクロールさせる
     private static final String DOC_JS = "var d=document.scrollingElement||document.body;";
     private static final String POS_JS = "(function(){try{" + DOC_JS + "return [Math.round(d.scrollTop),Math.round(d.scrollHeight),Math.round(d.clientHeight||window.innerHeight)].join(',')}catch(e){return ''}})()";
@@ -72,10 +85,26 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                 String scheme = request.getUrl().getScheme();
                 return !("http".equals(scheme) || "https".equals(scheme) || "about".equals(scheme));
             }
-            @Override public void onPageFinished(WebView view, String url) { CookieManager.getInstance().flush(); remember(url); }
-            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) { remember(url); }
+            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                loadFailed = false;
+                if (MusicResume.shouldRetry(url)) lastRequested = url;
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                CookieManager.getInstance().flush();
+                // 読み込みに失敗したページ（エラー表示）は「最後の音楽ページ」として覚えない
+                if (loadFailed) return;
+                if (retryAttempt > 0) { retryAttempt = 0; pageError = ""; }
+                remember(url);
+            }
+            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) { if (!loadFailed) remember(url); }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) pageError = error.getDescription().toString();
+                if (!request.isForMainFrame()) return;
+                pageError = error.getDescription().toString();
+                // 開こうとしていたページ（エラー表示のページではない）を覚えて、時間をおいて開き直す
+                String u = request.getUrl() == null ? null : request.getUrl().toString();
+                failedUrl = MusicResume.shouldRetry(u) ? u : lastRequested;
+                loadFailed = true;
+                scheduleRetry();
             }
         });
         try (java.io.InputStream in = context.getAssets().open("loop-watch.js")) {
@@ -86,14 +115,57 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
         prefs = context.getSharedPreferences("music", Context.MODE_PRIVATE);
         String saved = null;
         try { saved = prefs.getString(KEY_LAST, null); } catch (Exception ignored) { }
-        if (MusicResume.MP3.equals(saved)) {
-            // MP3ページはテレビ内サーバーのポートが決まってから開く（決まらなければ10秒後に既定ポートで開く）
-            pendingMp3 = true;
-            ui.postDelayed(this::openPendingMp3, 10000);
-        } else {
-            loadUrl(MusicResume.startUrl(saved, StartupConfig.MUSIC_HOME, port));
-        }
+        // 1.2.6: 電源オンはいつも MP3。ページはテレビ内サーバーのポートが決まってから開く（決まらなければ10秒後に既定ポートで開く）
+        pendingMp3 = true;
+        ui.postDelayed(this::openPendingMp3, 10000);
         ui.postDelayed(this::tick, APPLY_MS);
+        watchNetwork(context);
+    }
+
+    /** ネットがつながった合図で、開けなかったページをすぐ開き直す。 */
+    private void watchNetwork(Context context) {
+        try {
+            cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            netCallback = new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) { ui.post(RemoteMusicView.this::retryOnNetwork); }
+            };
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                cm.registerDefaultNetworkCallback(netCallback);
+            } else {
+                NetworkRequest req = new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build();
+                cm.registerNetworkCallback(req, netCallback);
+            }
+        } catch (Exception e) { netCallback = null; }
+    }
+
+    private void scheduleRetry() {
+        if (closed || retryPending || !MusicResume.shouldRetry(failedUrl)) return;
+        retryAttempt++;
+        retryPending = true;
+        ui.postDelayed(retryTask, MusicResume.retryDelayMs(retryAttempt));
+    }
+
+    private void retryNow() {
+        retryPending = false;
+        if (closed || !loadFailed || !MusicResume.shouldRetry(failedUrl)) return;
+        loadUrl(failedUrl);
+    }
+
+    private void retryOnNetwork() {
+        if (closed || !loadFailed || !MusicResume.shouldRetry(failedUrl)) return;
+        ui.removeCallbacks(retryTask);
+        retryPending = false;
+        loadUrl(failedUrl);
+    }
+
+    /** PC からページを変える操作が来たら、開き直しの予約をやめてそちらを優先する。 */
+    private void cancelRetry() {
+        ui.removeCallbacks(retryTask);
+        retryPending = false;
+        retryAttempt = 0;
+        loadFailed = false;
+        failedUrl = null;
     }
 
     /** テレビ内サーバーの操作の列と実際の待受ポートをつなぐ。 */
@@ -158,7 +230,7 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
             state = new JSONObject().put("url", getUrl() == null ? "" : getUrl())
                 .put("title", getTitle() == null ? "" : getTitle()).put("error", pageError).put("pin", pinShown)
                 .put("scrollY", scrollY).put("scrollHeight", scrollH).put("clientHeight", clientH)
-                .put("update", UpdateManager.getStatus()).put("version", org.screenlite.webkiosk.BuildConfig.VERSION_CODE).toString();
+                .put("update", UpdateManager.getStatus()).put("newer", UpdateManager.getNewerCode()).put("autoReturn", AutoReturnSetting.get(getContext())).put("version", org.screenlite.webkiosk.BuildConfig.VERSION_CODE).toString();
         } catch (Exception ignored) { }
         int w = getWidth(), h = getHeight();
         if (w < 1 || h < 1) return;
@@ -175,8 +247,13 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
     private void apply(CommandQueue.Command c) {
         pageError = "";
         switch (c.action) {
-            case "click": case "key": case "text": case "scroll": case "scrollTo": case "navigate": case "preset": case "back": case "forward": case "reload":
+            case "click": case "key": case "text": case "scroll": case "scrollTo": case "navigate": case "back": case "forward": case "reload":
                 lastUserCmd = SystemClock.uptimeMillis(); break;
+            default: break;
+        }
+        switch (c.action) {
+            case "navigate": case "cast": case "preset": case "stop": case "back": case "forward": case "reload":
+                cancelRetry(); break;
             default: break;
         }
         switch (c.action) {
@@ -185,7 +262,15 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                 if ("http".equals(u.getScheme()) || "https".equals(u.getScheme())) loadUrl(c.value);
                 break;
             }
+            case "cast":
+                // 開いた直後に止まっている動画は loop-watch に再生させたいので、直前の操作の時刻を消して「人が止めた」と見なされないようにする
+                lastUserCmd = -1;
+                if (CommandQueue.okCast(c.value)) loadUrl(c.value);
+                break;
+            case "autoReturn": AutoReturnSetting.set(getContext(), "on".equals(c.value)); break;
             case "preset":
+                // cast と同じく、開いた直後に止まっている曲は loop-watch に再生させる（「人が止めた」と見なさない）
+                lastUserCmd = -1;
                 if ("youtube".equals(c.value)) loadUrl(StartupConfig.MUSIC_HOME);
                 else if ("mp3".equals(c.value)) loadUrl("http://127.0.0.1:" + port + "/mp3");
                 break;
@@ -224,6 +309,11 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
                     case "ArrowDown": code = KeyEvent.KEYCODE_DPAD_DOWN; break;
                     case "ArrowLeft": code = KeyEvent.KEYCODE_DPAD_LEFT; break;
                     case "ArrowRight": code = KeyEvent.KEYCODE_DPAD_RIGHT; break;
+                    case "PageUp": code = KeyEvent.KEYCODE_PAGE_UP; break;
+                    case "PageDown": code = KeyEvent.KEYCODE_PAGE_DOWN; break;
+                    case "Home": code = KeyEvent.KEYCODE_MOVE_HOME; break;
+                    case "End": code = KeyEvent.KEYCODE_MOVE_END; break;
+                    case "Delete": code = KeyEvent.KEYCODE_FORWARD_DEL; break;
                     default: code = KeyEvent.KEYCODE_ESCAPE;
                 }
                 dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, code)); dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, code)); break;
@@ -243,5 +333,13 @@ public final class RemoteMusicView extends WebView implements MusicHttp.Frames {
         });
     }
 
-    public void shutdown() { closed = true; ui.removeCallbacksAndMessages(null); stopLoading(); loadUrl("about:blank"); destroy(); }
+    public void shutdown() {
+        closed = true;
+        ui.removeCallbacksAndMessages(null);
+        if (cm != null && netCallback != null) {
+            try { cm.unregisterNetworkCallback(netCallback); } catch (Exception ignored) { }
+            netCallback = null;
+        }
+        stopLoading(); loadUrl("about:blank"); destroy();
+    }
 }

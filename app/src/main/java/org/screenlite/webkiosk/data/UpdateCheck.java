@@ -45,4 +45,22 @@ public final class UpdateCheck {
 
     /** 確認画面を開いたあと、結果が来なければこの時間で押せる状態に戻す。 */
     public static final long WAIT_RESULT_MS = 4L * 60 * 1000;
+
+    /** 「重ねて表示」が未許可なら、更新後に自動で前に出られないので案内する。 */
+    public static String overlayNote(boolean canOverlay) {
+        return canOverlay ? "" : "更新が終わったら、画面の『開く』を押してください";
+    }
+
+    /** 「不明なアプリ」設定を開く前に立てる更新待ちフラグのキー。 */
+    public static final String PREF_PENDING = "update_pending";
+    public static long firstDelayMs(boolean pending) { return pending ? 5_000L : FIRST_DELAY_MS; }
+
+    /** ダウンロード全体の締め切り。 */
+    public static final long DOWNLOAD_TOTAL_MS = 10L * 60 * 1000;
+    public static boolean downloadExpired(long startMs, long nowMs) { return nowMs - startMs > DOWNLOAD_TOTAL_MS; }
+
+    /** 暗転中に押した決定キーは暗転を解くだけ。 */
+    public static boolean shouldInstallOnKey(boolean wasIdle) { return !wasIdle; }
+
+    public static final String MSG_BROKEN_APK = "落とした更新ファイルが壊れています。もう一度押してください";
 }

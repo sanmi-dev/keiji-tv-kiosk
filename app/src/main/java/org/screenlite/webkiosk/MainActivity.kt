@@ -80,8 +80,6 @@ class MainActivity : ComponentActivity() {
         // PCから入力するため、テレビの掲示の上にソフトキーボードを出さない。
         window.addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
         StayOnTopServiceStarter.ensureRunning(this)
-        // 起動の約60秒後と3時間ごとに新しい版を確かめる
-        org.screenlite.webkiosk.app.UpdateManager.start()
 
         unlockHandler = TapUnlockHandler {
             openSettings()
@@ -105,16 +103,26 @@ class MainActivity : ComponentActivity() {
     // サンミ改造: テレビではリモコンのボタンを Web ページへ渡す（元の Screenlite は全部捨てていた）。
     // 戻るボタンだけはアプリが受け取り、ページを閉じないようにする。戻るを3秒押し続けると設定画面。
     private var backHandled = false
+    private var confirmDownSeen = false
+    private var confirmDownWasIdle = false
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val wasIdle = idleController.isIdleMode.value
         idleController.onUserInteraction()
         // 更新のポップアップ中は、決定キーをフォーカスに頼らず画面全体で受ける（離したときに1回だけ）
         if (org.screenlite.webkiosk.app.UpdateManager.newerCode.value > 0 &&
             org.screenlite.webkiosk.data.UpdateCheck.isConfirmKey(event.keyCode)) {
-            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
-                org.screenlite.webkiosk.app.UpdateManager.install(this)
+            // ポップアップ表示中に押し始め（DOWN）を見たときだけ、その UP で更新する（出る前に押したキーの UP では動かない）
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                if (event.repeatCount == 0) { confirmDownSeen = true; confirmDownWasIdle = wasIdle }
+            } else if (event.action == KeyEvent.ACTION_UP) {
+                val seen = confirmDownSeen
+                confirmDownSeen = false
+                if (seen && !event.isCanceled &&
+                    org.screenlite.webkiosk.data.UpdateCheck.shouldInstallOnKey(confirmDownWasIdle)) org.screenlite.webkiosk.app.UpdateManager.install(this)
             }
             return true
         }
+        confirmDownSeen = false
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 if (event.repeatCount == 0) backHandled = false
@@ -218,7 +226,7 @@ fun AppContent(unlockHandler: TapUnlockHandler, activity: Activity) {
                 androidx.compose.material3.Text(
                     text = AutoStart.NOTICE,
                     color = Color.White,
-                    fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp),
+                    fontSize = androidx.compose.ui.unit.TextUnit(18f, androidx.compose.ui.unit.TextUnitType.Sp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xEEB71C1C))
@@ -272,33 +280,40 @@ private fun UpdatePopup(code: Int) {
     val msg by org.screenlite.webkiosk.app.UpdateManager.message
     val working by org.screenlite.webkiosk.app.UpdateManager.working
     val focus = remember { FocusRequester() }
-    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier.background(Color(0xFF1E3A5F)).padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        // 掲示を覆う範囲を小さくするため、文言とボタンを横1行に並べる（高さはおよそ56dp）
+        androidx.compose.foundation.layout.Row(
+            modifier = Modifier.fillMaxWidth().background(Color(0xFF1E3A5F)).padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            androidx.compose.material3.Text(
-                text = "新しい版があります（版$code）。リモコンの決定で更新します",
-                color = Color.White,
-                fontSize = androidx.compose.ui.unit.TextUnit(26f, androidx.compose.ui.unit.TextUnitType.Sp)
-            )
-            if (msg.isNotEmpty()) {
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
                 androidx.compose.material3.Text(
-                    text = msg,
-                    color = Color(0xFFFDE68A),
-                    fontSize = androidx.compose.ui.unit.TextUnit(20f, androidx.compose.ui.unit.TextUnitType.Sp),
-                    modifier = Modifier.padding(top = 12.dp)
+                    text = "新しい版があります（版$code）。リモコンの決定で更新します",
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
                 )
+                if (msg.isNotEmpty()) {
+                    androidx.compose.material3.Text(
+                        text = msg.replace("\n", "　"),
+                        color = Color(0xFFFDE68A),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp)
+                    )
+                }
             }
             val failed = msg.contains("もう一度")
             androidx.compose.material3.Button(
                 onClick = { org.screenlite.webkiosk.app.UpdateManager.install(context) },
                 enabled = !working,
-                modifier = Modifier.padding(top = 20.dp).focusRequester(focus)
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+                modifier = Modifier.padding(start = 12.dp).focusRequester(focus)
             ) {
                 androidx.compose.material3.Text(
                     text = if (working) "お待ちください…" else if (failed) "もう一度" else "更新する",
-                    fontSize = androidx.compose.ui.unit.TextUnit(22f, androidx.compose.ui.unit.TextUnitType.Sp)
+                    fontSize = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
                 )
             }
         }

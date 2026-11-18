@@ -6,41 +6,87 @@
 <meta name="referrer" content="no-referrer">
 <title>音楽の操作（掲示物テレビ）</title>
 <style>
+  :root { --accent: #2a6f5f; --bg: #f7f7f2; --line: #d5ddd8; --muted: #555; --pale: #e8f1ee; --danger: #b91c1c; }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, "Segoe UI", "Meiryo", sans-serif; background: #f3f5f8; color: #1f2937; }
-  header { background: #1e3a5f; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
+  body { margin: 0; font-family: system-ui, "Yu Gothic UI", "Meiryo", sans-serif; background: var(--bg); color: #222; }
+  header { background: var(--accent); color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 12px; }
   header h1 { font-size: 1.1rem; margin: 0; flex: 1; }
-  #conn { font-size: .85rem; padding: 2px 10px; border-radius: 99px; background: #64748b; }
-  #conn.online { background: #16a34a; }
-  main { max-width: 1100px; margin: 0 auto; padding: 14px; }
-  .card { background: #fff; border-radius: 10px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 12px; }
+  #conn { font-size: .85rem; padding: 2px 12px; border-radius: 99px; background: #64748b; color: #fff; }
+  #conn.online { background: #fff; color: var(--accent); }
+  main { max-width: 1340px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  input[type=text] { flex: 1; min-width: 200px; font-size: 1rem; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
-  button { font-size: .95rem; padding: 8px 14px; border-radius: 6px; border: 1px solid #2563eb; background: #2563eb; color: #fff; cursor: pointer; }
-  button.ghost { background: #fff; color: #2563eb; }
+  .grow { flex: 1; }
+  label.lbl { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 4px; }
+  input[type=text] { flex: 1; min-width: 200px; font-size: 1rem; padding: 10px 12px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; }
+  button { min-height: 44px; font-size: .95rem; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  button.ghost { background: #fff; color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
-  #viewport { position: relative; background: #000; border-radius: 8px; overflow: hidden; min-height: 200px; display: flex; align-items: center; justify-content: center; }
-  #frame { display: block; width: 100%; height: auto; cursor: pointer; }
+  .note { font-size: .85rem; color: var(--muted); }
+  #viewport { position: relative; background: #1f2430; border-radius: 8px; overflow: hidden; min-height: 200px; max-height: 360px; display: flex; align-items: center; justify-content: center; }
+  #frame { display: block; max-width: 100%; max-height: 360px; height: auto; cursor: pointer; }
   #empty { color: #cbd5e1; padding: 40px; }
   #msg { min-height: 1.3em; font-size: .9rem; color: #475569; margin-top: 6px; }
   #title { font-weight: bold; } #url { color: #64748b; font-size: .85rem; word-break: break-all; }
   #pinBox { max-width: 420px; margin: 40px auto; text-align: center; }
-  #pin { font-size: 2rem; letter-spacing: .4em; text-align: center; width: 9em; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
-  .err { color: #b91c1c; min-height: 1.3em; }
+  #pin { font-size: 2rem; letter-spacing: .4em; text-align: center; width: 9em; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+  .err { color: var(--danger); min-height: 1.3em; }
   .hide { display: none !important; }
   button:active:not(:disabled) { transform: translateY(1px); filter: brightness(.85); }
   #screenRow { display: flex; gap: 6px; align-items: stretch; margin-top: 8px; }
   #screenRow #viewport { flex: 1; }
   #scrollbar { width: 48px; display: flex; flex-direction: column; gap: 4px; user-select: none; }
   #scrollbar button { min-height: 48px; min-width: 44px; padding: 0; font-size: 1.1rem; }
-  #track { flex: 1; position: relative; background: #e2e8f0; border-radius: 6px; cursor: pointer; min-height: 80px; touch-action: none; }
-  #thumb { position: absolute; left: 4px; right: 4px; top: 40%; height: 20%; min-height: 24px; background: #64748b; border-radius: 5px; }
-  #track:active #thumb { background: #334155; }
+  .track { flex: 1; position: relative; background: #dfe6e3; border-radius: 6px; cursor: pointer; min-height: 80px; touch-action: none; }
+  .thumb { position: absolute; left: 4px; right: 4px; top: 40%; height: 20%; min-height: 24px; background: var(--accent); border-radius: 5px; }
   #updBox { margin-top: 10px; font-size: .9rem; color: #475569; }
   #updBtn { min-height: 44px; }
+  #castCard h2 { font-size: 1rem; margin: 0 0 10px; }
+  .linkBtn { display: inline-flex; align-items: center; min-height: 44px; font-size: .95rem; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--accent); background: #fff; color: var(--accent); text-decoration: none; }
+  #castLabel { display: block; font-size: .9rem; font-weight: bold; margin: 12px 0 4px; }
+  #castInput, #castBtn, #arBtn { min-height: 44px; }
+  #castMsg { min-height: 1.3em; font-size: .9rem; color: #475569; margin-top: 6px; }
+  #castMsg.err, #arMsg.err, #songMsg.err { color: var(--danger); }
+  #castMarkBox { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-size: .85rem; color: #475569; }
+  #castMarkBox p { margin: 0 0 6px; }
+  #castMark { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: 8px; border: 1px dashed var(--accent); color: var(--accent); text-decoration: none; cursor: grab; }
+  #arBox { margin-top: 8px; font-size: .9rem; color: #475569; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #drop { border: 2px dashed var(--accent); background: var(--pale); border-radius: 10px; padding: 18px; text-align: center; color: var(--accent); }
+  #drop.over { background: #d3e7e0; }
+  #songMsg { min-height: 1.3em; font-size: .9rem; color: #475569; margin-top: 8px; }
+  #songBar { height: 8px; background: #dfe6e3; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+  #songBar > div { height: 100%; width: 0; background: var(--accent); }
+  #songs { list-style: none; margin: 8px 0 0; padding: 0; }
+  #songs li { display: flex; justify-content: space-between; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 6px 0; }
+  #songs li span.nm { word-break: break-all; }
+  /* ===== ブラウザモード（画面いっぱい） ===== */
+  #browserMode { position: fixed; inset: 0; background: #dee3e1; display: flex; flex-direction: column; z-index: 100; }
+  #browserMode .bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: #eef2f0; border-bottom: 1px solid var(--line); }
+  #browserMode .bar button { min-height: 44px; padding: 6px 12px; }
+  #browserMode .icon { min-width: 44px; padding: 0; font-size: 1.2rem; background: transparent; color: #333; border-color: transparent; }
+  #browserMode .icon:hover { background: #dfe6e3; }
+  #bAddr { border-radius: 999px; background: #fff; }
+  #bBody { flex: 1; display: flex; min-height: 0; }
+  #bScreen { flex: 1; position: relative; background: #1f2430; display: flex; align-items: center; justify-content: center; overflow: hidden; outline: none; }
+  #bScreen.kb { box-shadow: inset 0 0 0 4px #3ddc97; }
+  #bFrame { max-width: 100%; max-height: 100%; display: block; cursor: pointer; }
+  #bEmpty { color: #cbd5e1; }
+  #kbSink { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; resize: none; }
+  #bSb { width: 64px; display: flex; flex-direction: column; gap: 6px; padding: 6px; background: #eef2f0; border-left: 1px solid var(--line); user-select: none; }
+  #bSb button { width: 52px; min-height: 48px; padding: 0; font-size: 1.1rem; }
+  #bStatus { display: flex; gap: 16px; align-items: center; padding: 4px 12px; min-height: 32px; font-size: .9rem; background: #f7f7f2; border-top: 1px solid var(--line); color: var(--muted); }
+  #kbState.kbon { color: #167a56; font-weight: 600; }
+  #bErr { color: var(--danger); font-weight: 600; }
+  #toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: 90vw; padding: 16px 24px; border-radius: 12px; font-size: 1.25rem; font-weight: 600; line-height: 1.5; box-shadow: 0 6px 24px rgba(0,0,0,.25); z-index: 9999; opacity: 0; pointer-events: none; transition: opacity .3s; }
+  #toast.show { opacity: 1; }
+  #toast.ok { background: #dcfce7; color: #14532d; border: 2px solid #16a34a; }
+  #toast.warn { background: #fef9c3; color: #713f12; border: 2px solid #eab308; }
+  #toast.err { background: #fee2e2; color: #7f1d1d; border: 2px solid #dc2626; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 </style>
 </head>
 <body>
+<div id="toast" role="status" aria-live="polite"></div>
 <header><h1>音楽の操作（掲示物テレビ）</h1><span id="conn">未接続</span></header>
 <main>
   <section id="pairView" class="card hide">
@@ -49,34 +95,44 @@
       <p><input id="pin" type="text" inputmode="numeric" maxlength="4" autocomplete="off"></p>
       <p class="row" style="justify-content:center"><button id="pairBtn" type="button">接続する</button><button id="showPin" type="button" class="ghost">番号をテレビに出す</button></p>
       <p id="pairErr" class="err"></p>
+      <p id="pairCastNote"></p>
     </div>
   </section>
   <section id="ctrlView" class="hide">
     <div class="card">
       <div class="row">
-        <button type="button" data-preset="youtube">YouTube（テスト曲）</button>
-        <button type="button" data-preset="mp3">MP3（予備）</button>
-        <span style="flex:1"></span>
-        <button type="button" class="ghost" data-act="back">戻る</button>
-        <button type="button" class="ghost" data-act="forward">進む</button>
-        <button type="button" class="ghost" data-act="reload">再読込</button>
+        <button type="button" data-preset="mp3">MP3（いつもの曲）</button>
+        <button type="button" class="ghost" data-preset="youtube">YouTube（テスト曲）</button>
+        <span class="grow"></span>
         <button type="button" class="ghost" data-act="stop">停止</button>
         <button id="updBtn" type="button" class="ghost" title="テレビのアプリに新しい版があるか確かめます">アップデート</button>
       </div>
-      <div class="row" style="margin-top:8px">
-        <input id="addr" type="text" placeholder="URL または検索する言葉">
-        <button id="openBtn" type="button">開く／検索</button>
+      <div style="margin-top:12px">
+        <label class="lbl" for="addr">URL または検索する言葉</label>
+        <div class="row">
+          <input id="addr" type="text" placeholder="例: https://www.youtube.com/watch?v=…">
+          <button id="openBtn" type="button">開く／検索</button>
+        </div>
       </div>
     </div>
     <div class="card">
-      <div id="title"></div><div id="url"></div>
+      <div class="row">
+        <div class="grow"><div id="title"></div><div id="url"></div></div>
+        <button id="openBrowser" type="button">🖥 ブラウザモードで操作する</button>
+      </div>
       <div id="screenRow">
         <div id="viewport"><img id="frame" class="hide" alt="テレビ内の音楽画面"><div id="empty">画面を読み込んでいます…</div></div>
         <div id="scrollbar" aria-label="画面のスクロール">
           <button id="sbUp" type="button" class="ghost" title="1画面分 上へ">▲</button>
-          <div id="track" title="クリックかドラッグでその位置へ"><div id="thumb"></div></div>
+          <div id="track" class="track" title="クリックかドラッグでその位置へ"><div id="thumb" class="thumb"></div></div>
           <button id="sbDown" type="button" class="ghost" title="1画面分 下へ">▼</button>
         </div>
+      </div>
+      <p class="note">細かい操作（クリック・文字入力・スクロール）は「ブラウザモードで操作する」から。</p>
+      <div class="row" style="margin-top:8px">
+        <button type="button" class="ghost" data-act="back">戻る</button>
+        <button type="button" class="ghost" data-act="forward">進む</button>
+        <button type="button" class="ghost" data-act="reload">再読込</button>
       </div>
       <div class="row" style="margin-top:8px">
         <input id="text" type="text" placeholder="文字を送る（先に画面の入力欄をクリック）">
@@ -89,10 +145,102 @@
       </div>
       <div id="msg"></div>
       <div id="updBox">テレビのアプリ: <span id="updMsg">（「アップデート」で新しい版を確かめます）</span></div>
+      <div id="arBox">ホームに出たとき自動で掲示に戻る: <span id="arState">確認中…</span><button id="arBtn" type="button" class="ghost" disabled>切り替える</button><span id="arMsg"></span></div>
+    </div>
+    <div class="card">
+      <b>テレビの曲（MP3）</b>
+      <p class="note" style="margin:4px 0 8px">電源を入れると、いつもこの曲が流れます（上から順にくり返し）。</p>
+      <div id="drop">ここに MP3 ファイルをドラッグ<br>または <button id="pickSong" type="button" class="ghost" style="margin-top:6px">PC から選ぶ</button>
+        <input id="songFile" type="file" accept=".mp3,audio/mpeg" multiple class="hide">
+      </div>
+      <div id="songMsg" role="status"></div>
+      <div id="songBar" class="hide"><div></div></div>
+      <ul id="songs"></ul>
+      <p class="note" id="songFree">テレビの空き: 確認中… ／ 1曲 30MB まで</p>
+    </div>
+    <div id="castCard" class="card">
+      <h2>PC で探してテレビに映す</h2>
+      <div class="row"><a class="linkBtn" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">YouTube を別のタブで開く</a></div>
+      <label id="castLabel" for="castInput">見つけた動画のリンク</label>
+      <div class="row">
+        <input id="castInput" type="text" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+        <button id="castBtn" type="button">テレビに映す</button>
+      </div>
+      <div id="castMsg"></div>
+      <div id="castMarkBox" class="hide">
+        <p><b>YouTube の画面から1回で映したいとき</b></p>
+        <p>下の『テレビに映す』をブラウザのお気に入りバーへドラッグして置くと、YouTube の画面でそれを押すだけでテレビに映せます</p>
+        <a id="castMark" href="#">テレビに映す</a>
+      </div>
     </div>
   </section>
 </main>
+<div id="browserMode" class="hide">
+  <div class="bar">
+    <button id="closeBrowser" type="button" class="ghost" title="基本モードに戻る">✕ 基本モードに戻る</button>
+    <button type="button" class="icon" data-act="back" title="戻る">←</button>
+    <button type="button" class="icon" data-act="forward" title="進む">→</button>
+    <button type="button" class="icon" data-act="reload" title="再読込">⟳</button>
+    <input id="bAddr" type="text" aria-label="アドレス" placeholder="URL または検索する言葉（Enter で開く）">
+    <button type="button" class="ghost" data-preset="mp3">MP3 に戻す</button>
+    <button type="button" class="ghost" data-act="stop">停止</button>
+  </div>
+  <div id="bBody">
+    <div id="bScreen" tabindex="0">
+      <img id="bFrame" class="hide" alt="テレビ内の音楽画面"><div id="bEmpty">画面を読み込んでいます…</div>
+      <textarea id="kbSink" aria-label="テレビへのキーボード入力" autocomplete="off"></textarea>
+    </div>
+    <div id="bSb" aria-label="テレビのページのスクロール">
+      <button id="bTop" type="button" class="ghost" title="ページの一番上へ">⤒</button>
+      <button id="bUp" type="button" class="ghost" title="1画面分 上へ">▲</button>
+      <div id="bTrack" class="track" title="クリックかドラッグでその位置へ"><div id="bThumb" class="thumb"></div></div>
+      <button id="bDown" type="button" class="ghost" title="1画面分 下へ">▼</button>
+      <button id="bBottom" type="button" class="ghost" title="ページの一番下へ">⤓</button>
+    </div>
+  </div>
+  <div id="bStatus">
+    <span id="kbState">キーボード: PC のまま（画面をクリックでテレビへ）</span>
+    <span id="bErr"></span>
+    <span style="margin-left:auto">反応までの目安: 約1秒</span>
+  </div>
+</div>
 <script>
+/*<cast-link>*/
+// YouTube のリンクなら整えた https の URL を返す。それ以外は ''。
+function kjCastLink(input) {
+  if (typeof input !== 'string') return '';
+  var s = input.replace(/^\s+|\s+$/g, '');
+  if (!s) return '';
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = 'https://' + s;
+  var u;
+  try { u = new URL(s); } catch (e) { return ''; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+  if (u.username || u.password || u.port) return '';
+  var host = String(u.hostname || '').toLowerCase();
+  var path = u.pathname || '/';
+  var parts = [];
+  if (host === 'youtu.be') {
+    var id = path.replace(/^\//, '');
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return '';
+    host = 'www.youtube.com'; path = '/watch'; parts.push('v=' + id);
+  } else if (host === 'youtube.com') {
+    host = 'www.youtube.com';
+  } else if (host !== 'www.youtube.com' && host !== 'm.youtube.com' && host !== 'music.youtube.com') {
+    return '';
+  }
+  var q = (u.search || '').replace(/^\?/, '');
+  var list = q ? q.split('&') : [];
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i]) continue;
+    var k = list[i].split('=')[0];
+    try { k = decodeURIComponent(k.replace(/\+/g, ' ')); } catch (e) { }
+    if (k === 'si' || k === 'feature' || k === 'pp') continue;
+    parts.push(list[i]);
+  }
+  var out = 'https://' + host + path + (parts.length ? '?' + parts.join('&') : '');
+  return out.length > 2048 ? '' : out;
+}
+/*</cast-link>*/
 (function () {
   var TOKEN_KEY = 'keijiMusicToken';
   var token = '';
@@ -104,6 +252,7 @@
   function showPair() {
     token = ''; try { localStorage.removeItem(TOKEN_KEY); } catch (e) { }
     polling = false; setConn(false);
+    if (!$('browserMode').classList.contains('hide')) closeBrowser();
     $('ctrlView').classList.add('hide'); $('pairView').classList.remove('hide');
     $('pin').value = ''; $('pin').focus();
     requestPin();
@@ -111,6 +260,7 @@
   function showCtrl() {
     $('pairView').classList.add('hide'); $('ctrlView').classList.remove('hide');
     if (!polling) { polling = true; pollFrame(); pollState(); }
+    loadSongs();
   }
   function requestPin() { fetch('/api/pin-request', { method: 'POST' }).catch(function () { }); }
   function form(obj) {
@@ -144,6 +294,8 @@
       }).then(function (d) {
         token = d.token; try { localStorage.setItem(TOKEN_KEY, token); } catch (e) { }
         showCtrl();
+        // 接続前に受け取ったリンクがあれば、欄に入れて案内する（送信はしない）
+        if (pendingCast) { var l = pendingCast; pendingCast = ''; showPairCastNote(); offerCast(l); }
       }).catch(function (e) { $('pairErr').textContent = e.message; });
   });
   $('pin').addEventListener('keydown', function (e) { if (e.key === 'Enter') $('pairBtn').click(); });
@@ -152,8 +304,8 @@
   document.querySelectorAll('[data-preset]').forEach(function (b) { b.addEventListener('click', function () { send({ action: 'preset', value: b.getAttribute('data-preset') }); }); });
   document.querySelectorAll('[data-act]').forEach(function (b) { b.addEventListener('click', function () { send({ action: b.getAttribute('data-act') }); }); });
   document.querySelectorAll('[data-key]').forEach(function (b) { b.addEventListener('click', function () { send({ action: 'key', value: b.getAttribute('data-key') }); }); });
-  function openAddr() {
-    var v = $('addr').value.trim();
+  function openAddr(id) {
+    var v = $(typeof id === 'string' ? id : 'addr').value.trim();
     if (!v) return;
     var url = /^https?:\/\//i.test(v) ? v : /^[\w-]+(\.[\w-]+)+(\/|$)/.test(v) ? 'https://' + v : 'https://www.google.com/search?q=' + encodeURIComponent(v);
     send({ action: 'navigate', value: url });
@@ -181,7 +333,97 @@
     send({ action: 'scroll', dy: String(Math.round(Math.max(-1800, Math.min(1800, e.deltaY)))) });
   }, { passive: false });
 
-  // ===== スクロールバー（▲▼は1画面分、溝はその位置へ） =====
+  // ===== PC で探してテレビに映す（cast） =====
+  var CAST_BAD = 'YouTube のリンクを貼ってください（例: https://www.youtube.com/watch?v=…）';
+  var pendingCast = '';
+  function castMsg(text, isErr) { $('castMsg').textContent = text; $('castMsg').classList.toggle('err', !!isErr); }
+  function castSend(link) {
+    var b = $('castBtn');
+    b.disabled = true;
+    castMsg('送っています…', false);
+    return send({ action: 'cast', value: link }).then(function (ok) {
+      b.disabled = false;
+      if (ok) {
+        var okText = 'テレビに送りました。数秒で切り替わります';
+        castMsg(okText, false);
+        $('castInput').value = '';
+        // 5秒後に消す（その間に別の表示に変わっていたら消さない）
+        setTimeout(function () { if ($('castMsg').textContent === okText) castMsg('', false); }, 5000);
+      } else {
+        var m = $('msg').textContent || '';
+        if (m === 'この操作は送れません') castMsg('このリンクは映せませんでした。YouTube の動画のページのリンクを貼ってください', true);
+        else castMsg('テレビに送れませんでした。' + m, true);
+        $('castInput').value = link;
+      }
+      return ok;
+    });
+  }
+  // #cast= で受け取ったリンクを欄に入れて案内する（送信はしない）
+  function offerCast(link) {
+    $('castInput').value = link;
+    castMsg('このリンクをテレビに映します。よければ『テレビに映す』を押してください', false);
+    $('castBtn').focus();
+  }
+  function showPairCastNote() { $('pairCastNote').textContent = pendingCast ? '接続すると、選んだ動画をテレビに映す画面に進みます' : ''; }
+  function castFromInput() {
+    if ($('castBtn').disabled) return;
+    var link = kjCastLink($('castInput').value);
+    if (!link) { castMsg(CAST_BAD, true); return; }
+    castSend(link);
+  }
+  $('castBtn').addEventListener('click', castFromInput);
+  $('castInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); castFromInput(); } });
+  // お気に入りバー用のボタン（?store=店番号 で開かれたときだけ出す）
+  (function () {
+    var m = /[?&]store=([^&#]*)/.exec(location.search || '');
+    var id = '';
+    if (m) { try { id = decodeURIComponent(m[1]); } catch (e) { id = ''; } }
+    if (!/^[A-Za-z0-9_-]{1,10}$/.test(id)) return;
+    $('castMark').setAttribute('href', "javascript:(function(){window.open('https://sanmi-dev.github.io/sanmi-apps/music?store=" + id + "#cast='+encodeURIComponent(location.href),'keijiTv');})()");
+    $('castMark').addEventListener('click', function (e) { e.preventDefault(); castMsg('お気に入りバーへドラッグしてください', false); });
+    $('castMarkBox').classList.remove('hide');
+  })();
+  // #cast=リンク 付きで開かれたとき（お気に入りバーのボタンから）
+  function readCastHash() {
+    var h = location.hash || '';
+    if (h.indexOf('#cast=') !== 0) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { }
+    var raw = '';
+    try { raw = decodeURIComponent(h.slice(6)); } catch (e) { raw = ''; }
+    var link = kjCastLink(raw);
+    if (!link) { castMsg('YouTube のリンクではないので映せません', true); return; }
+    if (token) offerCast(link);
+    else { pendingCast = link; showPairCastNote(); }
+  }
+
+  // ===== ホームに出たとき自動で掲示に戻る（オン/オフ） =====
+  var arOn = null, arBusy = false, arWant = null, arAt = 0;
+  function arIdle() { arBusy = false; arWant = null; $('arBtn').disabled = arOn === null; $('arBtn').textContent = arOn ? 'オフにする' : 'オンにする'; }
+  function arFail() { arIdle(); $('arMsg').textContent = '切り替えられませんでした。もう一度押してください'; $('arMsg').classList.add('err'); }
+  $('arBtn').addEventListener('click', function () {
+    if (arOn === null || arBusy) return;
+    var want = !arOn;
+    arBusy = true;
+    $('arBtn').disabled = true; $('arBtn').textContent = '切り替えています…';
+    $('arMsg').textContent = ''; $('arMsg').classList.remove('err');
+    send({ action: 'autoReturn', value: want ? 'on' : 'off' }).then(function (ok) {
+      if (!ok) { arFail(); return; }
+      arWant = want; arAt = Date.now();
+      // テレビから状態が届かなくても、10秒たったら押せる状態に戻す
+      setTimeout(function () { if (arBusy && arWant === want && Date.now() - arAt >= 10000) arFail(); }, 10100);
+    });
+  });
+  function showAutoReturn(s) {
+    if (typeof s.autoReturn !== 'boolean') return;
+    arOn = s.autoReturn;
+    $('arState').textContent = arOn ? 'オン' : 'オフ';
+    if (!arBusy) { arIdle(); return; }
+    if (arWant === null) return;
+    if (arOn === arWant) arIdle();
+    else if (Date.now() - arAt > 10000) arFail();
+  }
+
+  // ===== スクロールバー（▲▼は1画面分、溝はその位置へ。基本モードとブラウザモードで共通） =====
   var lastState = null, dragging = false, lastDragSend = 0;
   function pageStep() {
     var c = lastState && lastState.clientHeight > 0 ? lastState.clientHeight : 600;
@@ -189,32 +431,38 @@
   }
   $('sbUp').addEventListener('click', function () { send({ action: 'scroll', dy: String(-pageStep()) }); });
   $('sbDown').addEventListener('click', function () { send({ action: 'scroll', dy: String(pageStep()) }); });
-  function trackRatio(e) {
-    var r = $('track').getBoundingClientRect();
-    if (r.height < 1) return 0;
-    return Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
-  }
+  $('bUp').addEventListener('click', function () { send({ action: 'scroll', dy: String(-pageStep()) }); });
+  $('bDown').addEventListener('click', function () { send({ action: 'scroll', dy: String(pageStep()) }); });
+  $('bTop').addEventListener('click', function () { sendScrollTo(0); });
+  $('bBottom').addEventListener('click', function () { sendScrollTo(1); });
+  var THUMBS = ['thumb', 'bThumb'];
   function moveThumb(ratio, size) {
     var sz = size == null ? 20 : size;
-    $('thumb').style.height = sz + '%';
-    $('thumb').style.top = (ratio * (100 - sz)) + '%';
+    THUMBS.forEach(function (id) { $(id).style.height = sz + '%'; $(id).style.top = (ratio * (100 - sz)) + '%'; });
   }
   function sendScrollTo(ratio) { moveThumb(ratio); send({ action: 'scrollTo', y: ratio.toFixed(4) }); }
-  $('track').addEventListener('pointerdown', function (e) {
-    if (!polling) return;
-    dragging = true;
-    try { $('track').setPointerCapture(e.pointerId); } catch (x) { }
-    // 押した時点ではつまみを動かすだけ。送るのはドラッグ中の間引き送信と、離したときの1回
-    moveThumb(trackRatio(e)); lastDragSend = Date.now();
-  });
-  $('track').addEventListener('pointermove', function (e) {
-    if (!dragging) return;
-    var r = trackRatio(e); moveThumb(r);
-    if (Date.now() - lastDragSend > 250) { lastDragSend = Date.now(); sendScrollTo(r); }
-  });
-  function endDrag(e) { if (!dragging) return; dragging = false; sendScrollTo(trackRatio(e)); }
-  $('track').addEventListener('pointerup', endDrag);
-  $('track').addEventListener('pointercancel', function () { dragging = false; });
+  function bindTrack(track) {
+    function trackRatio(e) {
+      var r = track.getBoundingClientRect();
+      if (r.height < 1) return 0;
+      return Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    }
+    track.addEventListener('pointerdown', function (e) {
+      if (!polling) return;
+      dragging = true;
+      try { track.setPointerCapture(e.pointerId); } catch (x) { }
+      // 押した時点ではつまみを動かすだけ。送るのはドラッグ中の間引き送信と、離したときの1回
+      moveThumb(trackRatio(e)); lastDragSend = Date.now();
+    });
+    track.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      var r = trackRatio(e); moveThumb(r);
+      if (Date.now() - lastDragSend > 250) { lastDragSend = Date.now(); sendScrollTo(r); }
+    });
+    track.addEventListener('pointerup', function (e) { if (!dragging) return; dragging = false; sendScrollTo(trackRatio(e)); });
+    track.addEventListener('pointercancel', function () { dragging = false; });
+  }
+  bindTrack($('track')); bindTrack($('bTrack'));
   function drawThumb(s) {
     if (dragging) return;
     var h = Number(s.scrollHeight) || 0, c = Number(s.clientHeight) || 0, y = Number(s.scrollY) || 0;
@@ -225,17 +473,32 @@
 
   // ===== アップデート（テレビに版の確認を送る） =====
   var updWaiting = 0;
-  var UPD_TEXT = { latest: '最新です', newer: 'テレビに「新しい版があります」が出ています。テレビの前でリモコンの決定を押してください', error: '版を確かめられませんでした（テレビのネット接続を確かめて、もう一度押してください）' };
+  var toastTimer = 0;
+  function toast(text, kind) {
+    var el = $('toast');
+    el.textContent = text;
+    el.className = 'show ' + (kind || 'ok');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { el.className = ''; }, 4000);
+  }
+  function updResult(text, kind) { $('updMsg').textContent = text; $('msg').textContent = text; toast(text, kind); }
   $('updBtn').addEventListener('click', function () {
     var b = $('updBtn');
     b.disabled = true; b.textContent = '確認しています…';
-    $('updMsg').textContent = '確認しています…';
+    $('updMsg').textContent = 'テレビに確かめています…';
+    $('msg').textContent = 'テレビに確かめています…';
     send({ action: 'checkUpdate' }).then(function (ok) {
       if (ok) {
-        $('msg').textContent = 'テレビに確認を送りました。新しい版があればテレビに『新しい版があります』が出ます（インストールはテレビの前で押してください）';
-        updWaiting = Date.now();
+        var mine = updWaiting = Date.now();
+        // テレビが応答しなくなっても（電源オフ・ネット切れ）必ず結果を出す
+        setTimeout(function () {
+          if (updWaiting !== mine) return;
+          updWaiting = 0;
+          updResult('結果がまだ届きません。テレビの電源とネットを確かめて、もう一度押してください', 'warn');
+          b.disabled = false; b.textContent = 'アップデート';
+        }, 40000);
       } else {
-        $('updMsg').textContent = '確認を送れませんでした。もう一度押してください';
+        updResult('確認を送れませんでした。もう一度押してください', 'err');
         b.disabled = false; b.textContent = 'アップデート';
       }
     });
@@ -244,12 +507,20 @@
     if (!updWaiting) return;
     var st = s.update || '';
     var waited = Date.now() - updWaiting;
+    var text, kind;
     if (waited < 2500 || st === 'checking' || st === 'idle') {
       if (waited < 40000) return;
-      $('updMsg').textContent = '結果がまだ届きません。少し待ってからもう一度押してください';
-    } else {
-      $('updMsg').textContent = (UPD_TEXT[st] || st) + (s.version ? '（いまの版 ' + s.version + '）' : '');
-    }
+      text = '結果がまだ届きません。少し待ってからもう一度押してください'; kind = 'warn';
+    } else if (st === 'latest') {
+      text = '最新です（いまの版 ' + (s.version || '?') + '）'; kind = 'ok';
+    } else if (st === 'newer') {
+      text = (s.newer ? '新しい版があります（版 ' + s.newer + '）。テレビの前でリモコンの決定を押してください' : '新しい版があります。テレビに案内が出ていなければ、少し待ってからもう一度押してください'); kind = 'warn';
+    } else if (st === 'error') {
+      text = '版を確かめられませんでした（テレビのネット接続を確かめて、もう一度押してください）'; kind = 'err';
+    } else { text = st; kind = 'warn'; }
+    $('updMsg').textContent = text;
+    $('msg').textContent = text;
+    toast(text, kind);
     updWaiting = 0;
     $('updBtn').disabled = false; $('updBtn').textContent = 'アップデート';
   }
@@ -259,8 +530,9 @@
     api('/api/frame').then(function (r) {
       if (r.status === 200) return r.blob().then(function (b) {
         var u = URL.createObjectURL(b);
-        $('frame').src = u; if (frameUrl) URL.revokeObjectURL(frameUrl); frameUrl = u;
+        $('frame').src = u; $('bFrame').src = u; if (frameUrl) URL.revokeObjectURL(frameUrl); frameUrl = u;
         $('frame').classList.remove('hide'); $('empty').classList.add('hide');
+        $('bFrame').classList.remove('hide'); $('bEmpty').classList.add('hide');
       });
     }).then(function () { setConn(true); }, function () { setConn(false); })
       .then(function () { setTimeout(pollFrame, 1000); });
@@ -271,12 +543,248 @@
       if (!s) return;
       $('title').textContent = s.title || 'テレビ内の音楽画面';
       $('url').textContent = s.url === 'about:blank' ? '' : (s.url || '');
+      if (document.activeElement !== $('bAddr')) $('bAddr').value = $('url').textContent;
       if (s.error) $('msg').textContent = s.error;
-      lastState = s; drawThumb(s); showUpdate(s);
+      lastState = s; drawThumb(s); showUpdate(s); showAutoReturn(s);
     }).catch(function () { }).then(function () { setTimeout(pollState, 2000); });
   }
 
+  // ===== ブラウザモード（画面いっぱいで操作） =====
+  var kbOn = false;
+  function bErr(text) { $('bErr').textContent = text || ''; }
+  function openBrowser() {
+    $('browserMode').classList.remove('hide');
+    document.body.style.overflow = 'hidden';
+    bErr('');
+    if (lastState && document.activeElement !== $('bAddr')) $('bAddr').value = lastState.url === 'about:blank' ? '' : (lastState.url || '');
+  }
+  function closeBrowser() {
+    kbOff();
+    $('browserMode').classList.add('hide');
+    document.body.style.overflow = '';
+  }
+  $('openBrowser').addEventListener('click', openBrowser);
+  $('closeBrowser').addEventListener('click', closeBrowser);
+  $('bAddr').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); openAddr('bAddr'); } });
+  $('bFrame').addEventListener('click', function (e) {
+    var r = $('bFrame').getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return;
+    var x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    var y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    kbQueue(function () { return send({ action: 'click', x: x.toFixed(4), y: y.toFixed(4) }); });
+  });
+  $('bScreen').addEventListener('click', kbStart);
+  $('bScreen').addEventListener('wheel', function (e) {
+    if (!polling) return;
+    e.preventDefault();
+    if (Date.now() - lastWheel < 180) return;
+    lastWheel = Date.now();
+    send({ action: 'scroll', dy: String(Math.round(Math.max(-1800, Math.min(1800, e.deltaY)))) }).then(function (ok) { if (!ok) bErr('スクロールを送れませんでした: ' + $('msg').textContent); });
+  }, { passive: false });
+
+  // キー入力モード: 画面をクリックすると PC のキーボードがテレビへ（Esc 長押しで解除）
+  var SPECIAL = { Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', ' ': 'Space', ArrowUp: 'ArrowUp', ArrowDown: 'ArrowDown', ArrowLeft: 'ArrowLeft', ArrowRight: 'ArrowRight', PageUp: 'PageUp', PageDown: 'PageDown', Home: 'Home', End: 'End', Delete: 'Delete' };
+  var kbChain = Promise.resolve(), textBuf = '', textTimer = 0, escDownAt = 0, escTimer = 0;
+  function kbStart() {
+    kbOn = true;
+    $('bScreen').classList.add('kb');
+    $('kbState').textContent = 'キーボード: テレビへ送信中（Esc 長押しで解除）';
+    $('kbState').className = 'kbon';
+    $('kbSink').value = '';
+    try { $('kbSink').focus({ preventScroll: true }); } catch (e) { $('kbSink').focus(); }
+  }
+  function kbOff() {
+    flushText();
+    kbOn = false;
+    clearTimeout(escTimer); escDownAt = 0;
+    $('bScreen').classList.remove('kb');
+    $('kbState').textContent = 'キーボード: PC のまま（画面をクリックでテレビへ）';
+    $('kbState').className = '';
+    if (document.activeElement === $('kbSink')) $('kbSink').blur();
+  }
+  // 送る順番を守るため、1つずつ前の送信が終わってから次を送る
+  function kbQueue(fn) {
+    kbChain = kbChain.then(fn).then(function (ok) {
+      if (ok === false) bErr('テレビに送れませんでした: ' + ($('msg').textContent || 'もう一度試してください'));
+      else bErr('');
+    }, function () { bErr('テレビに送れませんでした'); });
+  }
+  function flushText() {
+    clearTimeout(textTimer); textTimer = 0;
+    if (!textBuf) return;
+    var t = textBuf; textBuf = '';
+    kbQueue(function () { return send({ action: 'text', value: t }); });
+  }
+  function addText(t) {
+    if (!t) return;
+    textBuf += t;
+    if (textBuf.length >= 400) { flushText(); return; }
+    clearTimeout(textTimer);
+    textTimer = setTimeout(flushText, 250);
+  }
+  function sendKey(k) { flushText(); kbQueue(function () { return send({ action: 'key', value: k }); }); }
+  $('kbSink').addEventListener('keydown', function (e) {
+    if (!kbOn) return;
+    if (e.isComposing || e.keyCode === 229) return; // 日本語の変換中は送らない（確定してから送る）
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (e.repeat || escDownAt) return;
+      escDownAt = Date.now();
+      escTimer = setTimeout(function () { escDownAt = 0; kbOff(); }, 800);
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (SPECIAL[e.key]) { e.preventDefault(); sendKey(SPECIAL[e.key]); return; }
+    if (e.key && e.key.length === 1) { e.preventDefault(); addText(e.key); }
+  });
+  $('kbSink').addEventListener('keyup', function (e) {
+    if (e.key !== 'Escape' || !escDownAt) return;
+    clearTimeout(escTimer); escDownAt = 0;
+    if (kbOn) sendKey('Escape');
+  });
+  $('kbSink').addEventListener('compositionend', function (e) {
+    if (kbOn && e.data) addText(e.data);
+    $('kbSink').value = '';
+  });
+  $('kbSink').addEventListener('input', function (e) {
+    if (e.isComposing) return;
+    $('kbSink').value = '';
+  });
+  $('kbSink').addEventListener('blur', function () { if (kbOn) kbOff(); });
+
+  // ===== テレビの曲（MP3）: 送る・並べる・外す =====
+  var MAX_SONG = 30 * 1024 * 1024;
+  var songQueue = [], songBusy = false, songListBusy = false, songOkTimer = 0;
+  var SONG_ERR = {
+    bad_name: '名前が .mp3 で終わるファイルだけ送れます',
+    not_mp3: '中身が MP3 ではないようです',
+    broken: '送信が途中で切れました。もう一度送ってください',
+    too_large: '1曲 30MB までです',
+    full: 'テレビに入れられる曲の合計（1GB）を超えます。どれかを外してください',
+    no_space: 'テレビの空き容量が足りません。どれかを外してください',
+    auth: 'もう一度接続番号を入れてください'
+  };
+  function songMsg(text, isErr) {
+    clearTimeout(songOkTimer);
+    $('songMsg').textContent = text; $('songMsg').classList.toggle('err', !!isErr);
+  }
+  function songOk(text) {
+    songMsg(text, false);
+    songOkTimer = setTimeout(function () { if ($('songMsg').textContent === text) songMsg('', false); }, 5000);
+  }
+  function sizeText(b) {
+    b = Number(b) || 0;
+    if (b >= 1024 * 1024 * 1024) return '約 ' + (b / 1024 / 1024 / 1024).toFixed(1) + 'GB';
+    if (b >= 1024 * 1024) return '約 ' + (b / 1024 / 1024).toFixed(1) + 'MB';
+    return '約 ' + Math.max(1, Math.round(b / 1024)) + 'KB';
+  }
+  function drawSongs(d) {
+    var ul = $('songs');
+    ul.textContent = '';
+    var list = (d && d.songs) || [];
+    if (!list.length) {
+      var li = document.createElement('li');
+      li.textContent = 'まだ曲がありません。同梱の3曲が流れます';
+      ul.appendChild(li);
+    }
+    list.forEach(function (s, i) {
+      var li = document.createElement('li');
+      var nm = document.createElement('span'); nm.className = 'nm';
+      nm.textContent = (i + 1) + '. ' + s.name + '（' + sizeText(s.size) + '）';
+      var bs = document.createElement('span'); bs.className = 'row';
+      [['▲', 'up', i === 0], ['▼', 'down', i === list.length - 1], ['外す', 'remove', false]].forEach(function (b) {
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'ghost'; btn.textContent = b[0]; btn.disabled = b[2];
+        btn.title = b[1] === 'up' ? '1つ上へ' : b[1] === 'down' ? '1つ下へ' : 'テレビから外す（ファイルも消えます）';
+        btn.addEventListener('click', function () { songAction(s, b[1], btn); });
+        bs.appendChild(btn);
+      });
+      li.appendChild(nm); li.appendChild(bs); ul.appendChild(li);
+    });
+    if (d && typeof d.free === 'number') $('songFree').textContent = 'テレビの空き: ' + sizeText(d.free) + ' ／ 1曲 30MB まで';
+  }
+  function loadSongs() {
+    return api('/api/songs').then(function (r) { if (r.status !== 200) throw new Error(); return r.json(); })
+      .then(drawSongs).catch(function () { $('songFree').textContent = '曲の一覧を読めませんでした。少し待ってから開き直してください'; });
+  }
+  function songAction(s, what, btn) {
+    if (songListBusy) return;
+    songListBusy = true;
+    document.querySelectorAll('#songs button').forEach(function (b) { b.disabled = true; });
+    btn.textContent = what === 'remove' ? '外しています…' : '動かしています…';
+    var path = what === 'remove' ? '/api/songs/remove' : '/api/songs/move';
+    var body = what === 'remove' ? { id: s.id } : { id: s.id, dir: what };
+    api(path, { method: 'POST', body: form(body) }).then(function (r) {
+      if (r.status !== 200) throw new Error(r.status === 400 ? 'その曲はもうありません。一覧を読み直しました' : '変えられませんでした（' + r.status + '）');
+      return r.json();
+    }).then(function (d) {
+      drawSongs(d);
+      if (what === 'remove') songOk('「' + s.name + '」を外しました');
+    }).catch(function (e) {
+      songMsg(e.message || '変えられませんでした。もう一度押してください', true);
+      return loadSongs();
+    }).then(function () { songListBusy = false; });
+  }
+  function addSongs(files) {
+    for (var i = 0; i < files.length; i++) songQueue.push(files[i]);
+    nextSong();
+  }
+  function nextSong() {
+    if (songBusy) return;
+    var f = songQueue.shift();
+    if (!f) { $('songBar').classList.add('hide'); return; }
+    if (!/\.mp3$/i.test(f.name)) { songMsg('「' + f.name + '」は送れません: ' + SONG_ERR.bad_name, true); nextSong(); return; }
+    if (f.size > MAX_SONG) { songMsg('「' + f.name + '」は送れません: ' + SONG_ERR.too_large, true); nextSong(); return; }
+    if (f.size < 1) { songMsg('「' + f.name + '」は空のファイルです', true); nextSong(); return; }
+    songBusy = true;
+    var left = songQueue.length;
+    var head = '「' + f.name + '」を送っています' + (left ? '（あと ' + left + ' 曲）' : '');
+    songMsg(head + '… 0%', false);
+    $('songBar').classList.remove('hide'); $('songBar').firstChild.style.width = '0';
+    var x = new XMLHttpRequest();
+    x.open('PUT', '/api/song');
+    x.setRequestHeader('Authorization', 'Bearer ' + token);
+    x.setRequestHeader('X-Song-Name', encodeURIComponent(f.name));
+    x.upload.onprogress = function (e) {
+      if (!e.lengthComputable) return;
+      var p = Math.floor(e.loaded / e.total * 100);
+      songMsg(head + '… ' + p + '%', false);
+      $('songBar').firstChild.style.width = p + '%';
+    };
+    function done(errText) {
+      songBusy = false;
+      if (errText) songMsg('「' + f.name + '」を入れられませんでした: ' + errText, true);
+      else songOk('「' + f.name + '」をテレビに入れました');
+      loadSongs().then(nextSong);
+    }
+    x.onload = function () {
+      var code = '';
+      try { code = JSON.parse(x.responseText).code || ''; } catch (e) { code = ''; }
+      if (x.status === 200) { done(''); return; }
+      if (x.status === 401) { songQueue = []; songBusy = false; showPair(); return; }
+      if (x.status === 503) { done('テレビが別の曲を受け取り中です。少し待ってから送ってください'); return; }
+      if (x.status === 413) { done(SONG_ERR.too_large); return; }
+      done(SONG_ERR[code] || '送れませんでした（' + x.status + '）');
+    };
+    x.onerror = function () { done('テレビとの通信が切れました。テレビの電源とネットを確かめてください'); };
+    x.ontimeout = function () { done('時間がかかりすぎたので止めました。もう一度送ってください'); };
+    x.timeout = 10 * 60 * 1000;
+    x.send(f);
+  }
+  $('pickSong').addEventListener('click', function () { $('songFile').click(); });
+  $('songFile').addEventListener('change', function () { addSongs($('songFile').files); $('songFile').value = ''; });
+  $('drop').addEventListener('dragover', function (e) { e.preventDefault(); $('drop').classList.add('over'); });
+  $('drop').addEventListener('dragleave', function () { $('drop').classList.remove('over'); });
+  $('drop').addEventListener('drop', function (e) {
+    e.preventDefault(); $('drop').classList.remove('over');
+    if (e.dataTransfer && e.dataTransfer.files) addSongs(e.dataTransfer.files);
+  });
+  // 枠の外に落としても、ブラウザがファイルを開いてしまわないようにする
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); });
+
   if (token) showCtrl(); else showPair();
+  readCastHash();
 })();
 </script>
 </body>

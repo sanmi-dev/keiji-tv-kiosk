@@ -21,10 +21,22 @@ public final class MusicResume {
         return null;
     }
 
-    /** 起動時に開くページ。保存が無い・使えないなら home。 */
+    /** 起動時に開くページ。1.2.6: 保存の中身に関係なく、いつもテレビ内MP3ページ。 */
     public static String startUrl(String saved, String home, int port) {
-        if (MP3.equals(saved)) return "http://127.0.0.1:" + port + "/mp3";
-        String ok = toSaved(saved);
-        return (ok != null && !MP3.equals(ok)) ? ok : home;
+        return "http://127.0.0.1:" + port + "/mp3";
+    }
+
+    /** 読み込みに失敗したページを開き直すまでの待ち時間（1回目5秒・倍々・60秒で頭打ち）。 */
+    public static long retryDelayMs(int attempt) {
+        if (attempt <= 1) return 5000L;
+        if (attempt >= 5) return 60000L;
+        return 5000L << (attempt - 1);
+    }
+
+    /** 開き直す対象か（http/https のページだけ。about:blank などは対象外）。 */
+    public static boolean shouldRetry(String url) {
+        if (url == null) return false;
+        String l = url.toLowerCase(java.util.Locale.ROOT);
+        return l.startsWith("http://") || l.startsWith("https://");
     }
 }

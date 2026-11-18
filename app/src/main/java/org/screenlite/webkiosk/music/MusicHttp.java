@@ -15,10 +15,14 @@ public final class MusicHttp {
     }
     public static final class Response {
         public final int status; public final String contentType; public final byte[] body; public final Map<String, String> headers;
-        public Response(int status, String contentType, byte[] body, Map<String, String> headers) { this.status = status; this.contentType = contentType; this.body = body; this.headers = headers; }
+        /** null でなければ本文はこのファイル（ストリームで返す）。 */
+        public final java.io.File file;
+        public Response(int status, String contentType, byte[] body, Map<String, String> headers) { this(status, contentType, body, headers, null); }
+        public Response(int status, String contentType, byte[] body, Map<String, String> headers, java.io.File file) { this.status = status; this.contentType = contentType; this.body = body; this.headers = headers; this.file = file; }
     }
     private static final Pattern HOST = Pattern.compile("^([0-9.]+)(:[0-9]{1,5})?$");
     private static final Pattern MP3 = Pattern.compile("^/mp3/([a-z0-9-]+\\.mp3)$");
+    private static final Pattern SONG = Pattern.compile("^/mp3/s/([a-z0-9]{1,24})$");
     private static final Pattern BEARER = Pattern.compile("^Bearer\\s+([A-Za-z0-9_-]{32})$");
     static final int PIN_REQ_PER_MIN = 4;
 
@@ -28,12 +32,35 @@ public final class MusicHttp {
     private final Assets assets;
     private volatile Runnable pinRequestListener = null;
     private final ArrayDeque<Long> pinRequests = new ArrayDeque<>();
+    private volatile SongLibrary songs = null;
 
     public MusicHttp(PinPairing pairing, CommandQueue queue, Frames frames, Assets assets) {
         this.pairing = pairing; this.queue = queue; this.frames = frames; this.assets = assets;
     }
     /** POST /api/pin-request が来たときに呼ばれる（テレビ画面に番号を出す）。 */
     public void setPinRequestListener(Runnable r) { this.pinRequestListener = r; }
+
+    public void setSongs(SongLibrary lib) { this.songs = lib; }
+
+    /** PUT /api/song: 本文はストリームのまま曲の保存へ。 */
+    public Response upload(Request r, java.io.InputStream in, long len) {
+        if (!hostOk(header(r, "host"))) return text(403, "forbidden");
+        if (!authed(r)) return json(401, "{\"ok\":false,\"code\":\"auth\"}");
+        SongLibrary lib = songs;
+        if (lib == null) return json(503, "{\"ok\":false,\"code\":\"unavailable\"}");
+        String raw = header(r, "x-song-name"), name;
+        try { name = java.net.URLDecoder.decode(raw == null ? "" : raw, "UTF-8"); }
+        catch (Exception e) { name = ""; }
+        SongLibrary.Result res = lib.save(name, in, len);
+        int st;
+        switch (res.code) {
+            case "ok": st = 200; break;
+            case "too_large": st = 413; break;
+            case "full": case "no_space": st = 507; break;
+            default: st = 400;
+        }
+        return json(st, "{\"ok\":" + "ok".equals(res.code) + ",\"code\":\"" + res.code + "\"}");
+    }
 
     public Response handle(Request r, long now) {
         if (!hostOk(header(r, "host"))) return text(403, "forbidden");
@@ -90,7 +117,40 @@ public final class MusicHttp {
                 if (j == null) return new Response(204, "image/jpeg", new byte[0], common());
                 return new Response(200, "image/jpeg", j, common());
             }
+            case "/api/songs": {
+                if (!m.equals("GET")) return text(405, "method");
+                if (!authed(r)) return json(401, "{\"ok\":false}");
+                return json(200, songsJson());
+            }
+            case "/mp3/list": {
+                if (!m.equals("GET")) return text(405, "method");
+                return json(200, songsJson());
+            }
+            case "/api/songs/move":
+            case "/api/songs/remove": {
+                if (!m.equals("POST")) return text(405, "method");
+                if (!authed(r)) return json(401, "{\"ok\":false}");
+                SongLibrary lib = songs;
+                if (lib == null) return json(503, "{\"ok\":false}");
+                Map<String, String> f = CommandQueue.parseFormSafe(body(r));
+                boolean done;
+                if (p.equals("/api/songs/remove")) done = lib.remove(f.get("id"));
+                else {
+                    String dir = f.get("dir");
+                    if (!"up".equals(dir) && !"down".equals(dir)) return json(400, "{\"ok\":false}");
+                    done = lib.move(f.get("id"), "up".equals(dir) ? -1 : 1);
+                }
+                return done ? json(200, lib.toJson()) : json(400, "{\"ok\":false}");
+            }
             default:
+                Matcher sm = SONG.matcher(p);
+                if (sm.matches()) {
+                    if (!m.equals("GET")) return text(405, "method");
+                    SongLibrary lib = songs;
+                    java.io.File f = lib == null ? null : lib.file(sm.group(1));
+                    if (f == null) return text(404, "not found");
+                    return new Response(200, "audio/mpeg", new byte[0], common(), f);
+                }
                 Matcher mm = MP3.matcher(p);
                 if (mm.matches()) {
                     if (!m.equals("GET")) return text(405, "method");
@@ -102,6 +162,10 @@ public final class MusicHttp {
         }
     }
 
+    private String songsJson() {
+        SongLibrary lib = songs;
+        return lib == null ? "{\"songs\":[],\"free\":0,\"total\":0}" : lib.toJson();
+    }
     private Response page(String m, String name) {
         if (!m.equals("GET")) return text(405, "method");
         byte[] b = assets.get(name);

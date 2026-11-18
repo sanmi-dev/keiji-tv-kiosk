@@ -15,6 +15,8 @@ import org.screenlite.webkiosk.music.MiniHttpServer
 import org.screenlite.webkiosk.music.MusicHttp
 import org.screenlite.webkiosk.music.PinPairing
 import org.screenlite.webkiosk.music.Registration
+import org.screenlite.webkiosk.music.SongLibrary
+import java.io.File
 import java.io.ByteArrayOutputStream
 import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
@@ -63,6 +65,7 @@ class MusicHub(context: Context, private val music: RemoteMusicView) {
         override fun save(tokens: List<String>) { prefs.edit().putString("tokens", tokens.joinToString(",")).apply() }
     }, rng)
     private val http = MusicHttp(pairing, queue, music, MusicHttp.Assets { name -> asset(name) })
+    private val songs = SongLibrary(File(app.filesDir, "songs"))
     @Volatile private var server: MiniHttpServer? = null
     @Volatile private var stopped = false
     @Volatile private var port = 0
@@ -72,6 +75,7 @@ class MusicHub(context: Context, private val music: RemoteMusicView) {
     private val hidePin = Runnable { pinText.value = null; music.setPinShown(false) }
 
     fun start() {
+        http.setSongs(songs)
         http.setPinRequestListener(Runnable {
             val pin = pairing.pin(System.currentTimeMillis())
             ui.post {
@@ -84,7 +88,9 @@ class MusicHub(context: Context, private val music: RemoteMusicView) {
         worker.execute {
             for (p in PORTS) {
                 try {
-                    val s = MiniHttpServer(p) { r -> http.handle(r, System.currentTimeMillis()) }
+                    val s = MiniHttpServer(p,
+                        MiniHttpServer.Handler { r -> http.handle(r, System.currentTimeMillis()) },
+                        MiniHttpServer.Uploader { r, input, len -> http.upload(r, input, len) })
                     if (stopped) break
                     s.start()
                     server = s; port = s.port()

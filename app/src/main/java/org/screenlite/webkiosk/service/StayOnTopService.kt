@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.screenlite.webkiosk.MainActivity
+import org.screenlite.webkiosk.app.AutoReturnSetting
 import org.screenlite.webkiosk.data.AutoStart
 import org.screenlite.webkiosk.data.KioskSettingsFactory
 
@@ -70,12 +71,19 @@ class StayOnTopService : Service() {
     }
     private var wakeReceiverRegistered = false
 
+    // このサービスが作られてから、掲示が一度でも見えたか（見えるまではオフでも見回りを続ける）
+    private var shownOnce = false
+
     private val checkTask = object : Runnable {
         override fun run() {
-            if (AutoStart.shouldBringToFront(isActivityVisible, SystemClock.elapsedRealtime(), pauseUntil)) {
+            // 見回りだけ「ホームに出たとき自動で掲示に戻る」の設定に従う（画面が点いたとき・起動時は設定に関係なく戻す）
+            // 起動時（BOOT_COMPLETED はこのサービスを起動するだけ）は、この最初の1回で前面に出すので設定を見ない
+            if (isActivityVisible) shownOnce = true
+            val enabled = AutoStart.patrolEnabled(AutoReturnSetting.get(this@StayOnTopService), shownOnce)
+            if (AutoStart.shouldPatrolReturn(enabled, isActivityVisible, SystemClock.elapsedRealtime(), pauseUntil)) {
                 bringAppToFront()
             } else {
-                Log.i("StayOnTopService", "Activity is visible or paused for settings, skipping bring to front")
+                Log.i("StayOnTopService", "Activity is visible, paused for settings, or auto return is off; skipping bring to front")
             }
             handler.postDelayed(this, checkInterval)
         }
